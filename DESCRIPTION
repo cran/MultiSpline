@@ -1,0 +1,39 @@
+Package: MultiSpline
+Type: Package
+Title: Spline-Based Nonlinear Modeling for Multilevel and Longitudinal
+        Data
+Version: 0.1.1
+Authors@R: 
+    person(given = "Subir",
+           family = "Hait",
+           email = "haitsubi@msu.edu",
+           role = c("aut", "cre"))
+Description: Provides tools for fitting, predicting, and visualizing nonlinear
+    relationships in single-level, multilevel, and longitudinal regression
+    models. Nonlinear functional forms are represented using natural cubic
+    splines from 'splines' and smooth terms from 'mgcv'. The package offers a
+    unified interface for specifying nonlinear effects, interactions with time
+    variables, random-intercept clustering structures, and additional linear
+    covariates. Utilities are included to generate prediction grids and produce
+    effect plots, facilitating interpretation and visualization of nonlinear
+    relationships in applied regression workflows. The implementation builds on
+    established methods for spline-based regression and mixed-effects modeling
+    (Hastie and Tibshirani, 1990 <doi:10.1201/9780203738535>; Bates et al.,
+    2015 <doi:10.18637/jss.v067.i01>; Wood, 2017
+    <doi:10.1201/9781315370279>). Applications include hierarchical and
+    longitudinal data structures common in education, health, and social
+    science research.
+Depends: R (>= 4.2.0)
+Imports: stats, lme4, mgcv, dplyr, ggplot2, rlang
+Suggests: lmerTest, knitr, rmarkdown, reformulas, testthat (>= 3.0.0)
+License: MIT + file LICENSE
+Encoding: UTF-8
+Language: en-US
+RoxygenNote: 7.3.3
+Config/testthat/edition: 3
+NeedsCompilation: no
+Packaged: 2026-03-10 13:44:08 UTC; Subir
+Author: Subir Hait [aut, cre]
+Maintainer: Subir Hait <haitsubi@msu.edu>
+Repository: CRAN
+Date/Publication: 2026-03-16 16:40:33 UTC

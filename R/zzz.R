@@ -1,0 +1,2 @@
+#' @importFrom splines ns
+NULL
