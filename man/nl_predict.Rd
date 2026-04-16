@@ -12,94 +12,58 @@ nl_predict(
   se = TRUE,
   level = 0.95,
   re_form = NA,
+  glmer_ci = c("delta", "boot"),
+  n_boot = 500L,
   ...
 )
 }
 \arguments{
-\item{object}{An \code{nl_fit} object returned by \code{\link{nl_fit}}.}
+\item{object}{An \code{nl_fit} object.}
 
-\item{x_seq}{Optional numeric vector of x values to predict over. If
-\code{NULL}, uses 100 evenly-spaced points between the stored 1st and
-99th percentiles (with fallback to the stored min/max range).}
+\item{x_seq}{Optional numeric vector of x values. If \code{NULL}, 200
+evenly-spaced points between the 1st and 99th percentiles.}
 
-\item{time_levels}{Optional vector of time levels to predict for. If
-\code{NULL} and a time variable is present, uses stored factor levels.}
+\item{time_levels}{Optional vector of time levels.}
 
-\item{controls_fixed}{Optional named list giving specific values for control
-variables. If \code{NULL}, stored defaults are used (mean for numeric;
-first level for factors).}
+\item{controls_fixed}{Optional named list of fixed control values.}
 
-\item{se}{Logical; if \code{TRUE}, includes standard errors and confidence
-intervals where available. Default \code{TRUE}.}
+\item{se}{Logical; include SEs and CIs. Default \code{TRUE}.}
 
-\item{level}{Confidence level for the interval. Default \code{0.95}.}
+\item{level}{Confidence level. Default \code{0.95}.}
 
-\item{re_form}{For mixed models (\code{lmerMod} / \code{glmerMod}), passed
-to \code{predict()}. Default \code{NA} gives population-level predictions
-(random effects set to zero).}
+\item{re_form}{For mixed models: \code{NA} (population-level, default) or
+\code{NULL} (include random effects).}
+
+\item{glmer_ci}{Method for glmerMod CIs: \code{"delta"} (default) or
+\code{"boot"} (parametric bootstrap).}
+
+\item{n_boot}{Number of bootstrap replicates when \code{glmer_ci = "boot"}.
+Default \code{500}.}
 
 \item{...}{Reserved for future use.}
 }
 \value{
-A data frame (or tibble) with columns: the focal predictor \code{x},
-\code{time} (if applicable), any control variables (at fixed values),
-\code{fit}, \code{se.fit}, \code{lwr}, and \code{upr}.
+A data frame with columns for the focal predictor, time (if any),
+controls at fixed values, \code{fit}, \code{se.fit}, \code{lwr},
+and \code{upr}.
 }
 \description{
 Creates a prediction data frame over a grid of the focal predictor \code{x}
 (and optionally over \code{time}), holding control variables at typical
-values (means for numeric; reference levels for factors). For mixed models,
-predictions default to population-level curves (random effects excluded).
+values. For mixed models, predictions default to population-level curves
+(random effects set to zero).
+
+v2 improvements:
+\itemize{
+\item \strong{CI for glmerMod}: approximate confidence intervals are
+computed via the parametric bootstrap or the delta method. Set
+\code{glmer_ci = "delta"} (default, fast) or \code{"boot"} (more
+accurate, slower).
+\item \strong{Cluster-specific predictions}: set \code{re_form = NULL}
+to include random effects in the predictions.
 }
-\examples{
-# --- Toy example (automatically tested by CRAN) ---
-# Single-level natural spline: fit then predict
-set.seed(1)
-mydata <- data.frame(
-  outcome = rnorm(120),
-  age     = runif(120, 18, 65),
-  id      = rep(1:30, each = 4)
-)
-fit  <- nl_fit(data = mydata, y = "outcome", x = "age", df = 4)
-pred <- nl_predict(fit)
-head(pred)
-
-\donttest{
-# Custom x grid
-pred_custom <- nl_predict(fit, x_seq = seq(20, 60, by = 5))
-
-# Without standard errors
-pred_nose <- nl_predict(fit, se = FALSE)
-
-# With time variable (spline x time interaction)
-set.seed(1)
-mydata2 <- data.frame(
-  outcome = rnorm(120),
-  age     = runif(120, 18, 65),
-  id      = rep(1:30, each = 4),
-  wave    = factor(rep(1:4, times = 30))
-)
-fit_t <- nl_fit(
-  data = mydata2,
-  y    = "outcome",
-  x    = "age",
-  time = "wave",
-  df   = 4
-)
-pred_t <- nl_predict(fit_t)
-
-# Multilevel model: population-level predictions
-fit_ml <- nl_fit(
-  data    = mydata,
-  y       = "outcome",
-  x       = "age",
-  cluster = "id",
-  df      = 4
-)
-pred_ml <- nl_predict(fit_ml)
-}
-
 }
 \seealso{
-\code{\link{nl_fit}}, \code{\link{nl_plot}}
+\code{\link{nl_fit}}, \code{\link{nl_plot}},
+\code{\link{nl_derivatives}}
 }

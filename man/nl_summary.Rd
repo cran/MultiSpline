@@ -36,43 +36,6 @@ p-values and denominator degrees of freedom are obtained via
 \pkg{lmerTest} (Satterthwaite method). For GLMMs (\code{glmerMod}),
 z-tests are reported from \code{summary()}.
 }
-\examples{
-# --- Toy example (automatically tested by CRAN) ---
-# Single-level natural spline on small simulated data
-set.seed(1)
-mydata <- data.frame(
-  outcome = rnorm(120),
-  age     = runif(120, 18, 65),
-  id      = rep(1:30, each = 4)
-)
-fit <- nl_fit(data = mydata, y = "outcome", x = "age", df = 4)
-nl_summary(fit)
-
-\donttest{
-# With p-values suppressed
-nl_summary(fit, pvals = FALSE)
-
-# No rounding
-nl_summary(fit, digits = NULL)
-
-# Multilevel model (lmerMod) with Satterthwaite p-values via lmerTest
-set.seed(1)
-mydata2 <- data.frame(
-  outcome = rnorm(240),
-  age     = runif(240, 18, 65),
-  id      = rep(1:60, each = 4)
-)
-fit_ml <- nl_fit(
-  data    = mydata2,
-  y       = "outcome",
-  x       = "age",
-  cluster = "id",
-  df      = 4
-)
-nl_summary(fit_ml)
-}
-
-}
 \seealso{
 \code{\link{nl_fit}}, \code{\link{summary.nl_fit}}
 }

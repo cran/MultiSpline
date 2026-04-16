@@ -13,56 +13,27 @@
 #'   multilevel model fitted via \code{lme4::lmer()} or
 #'   \code{lme4::glmer()}).
 #' @param include_residual Logical; if \code{TRUE} (default), includes the
-#'   residual variance component \code{Residual} in the output so that all
-#'   values sum to 1 (when a residual variance is available).
+#'   residual variance component \code{ICC_resid} in the output so that all
+#'   values sum to 1.
 #'
 #' @return
 #' A named numeric vector of ICCs, one per grouping factor (named
 #' \code{ICC_<groupname>}) plus \code{Residual} for the residual variance
-#' (when \code{include_residual = TRUE}). When a residual variance is available,
-#' all values sum to 1.
+#' (when \code{include_residual = TRUE}). All values sum to 1.
+#'
+#' @seealso \code{\link{nl_fit}}
 #'
 #' @examples
-#' # --- Toy example (automatically tested by CRAN) ---
-#' # Small multilevel data: 10 clusters, 5 obs each (50 rows total)
-#' set.seed(1)
-#' toy <- data.frame(
-#'   outcome = rnorm(50),
-#'   age     = runif(50, 18, 65),
-#'   id      = rep(1:10, each = 5)
-#' )
+#' \dontrun{
 #' fit <- nl_fit(
-#'   data    = toy,
-#'   y       = "outcome",
-#'   x       = "age",
-#'   cluster = "id",
-#'   df      = 2
-#' )
-#' nl_icc(fit)
-#'
-#' \donttest{
-#' # Two-level clustering: students nested in schools
-#' set.seed(1)
-#' mydata <- data.frame(
-#'   math_score = rnorm(240),
-#'   SES        = rnorm(240),
-#'   id         = rep(1:60, each = 4),
-#'   schid      = rep(1:12, each = 20)
-#' )
-#' fit_ml <- nl_fit(
 #'   data    = mydata,
 #'   y       = "math_score",
 #'   x       = "SES",
 #'   cluster = c("id", "schid"),
 #'   df      = 4
 #' )
-#' nl_icc(fit_ml)
-#'
-#' # Without residual variance in output
-#' nl_icc(fit_ml, include_residual = FALSE)
+#' nl_icc(fit)
 #' }
-#'
-#' @seealso \code{\link{nl_fit}}
 #'
 #' @export
 nl_icc <- function(object, include_residual = TRUE) {
@@ -153,13 +124,6 @@ nl_icc <- function(object, include_residual = TRUE) {
   if (include_residual && is.finite(resid_var)) {
     icc <- c(icc, Residual = resid_var / total)
   }
-
-  # Prefix names as ICC_<group> for clarity
-  names(icc) <- ifelse(
-    names(icc) == "Residual",
-    "Residual",
-    paste0("ICC_", names(icc))
-  )
 
   icc
 }

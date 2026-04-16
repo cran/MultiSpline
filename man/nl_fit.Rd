@@ -10,10 +10,15 @@ nl_fit(
   x,
   time = NULL,
   cluster = NULL,
+  nested = FALSE,
   controls = NULL,
-  method = c("ns", "gam"),
+  method = c("ns", "bs", "gam"),
   df = 4,
+  df_range = 2:8,
+  df_criterion = c("AIC", "BIC"),
   k = 5,
+  bs_degree = 3,
+  random_slope = FALSE,
   family = stats::gaussian(),
   ...
 )
@@ -25,132 +30,107 @@ nl_fit(
 
 \item{x}{Focal nonlinear predictor name (string). Must be numeric.}
 
-\item{time}{Optional time variable name (string). If provided, a
-spline-by-time interaction is included for \code{method = "ns"}; for
-\code{method = "gam"}, a factor \code{time} uses
-\code{s(x, by = time)} (group-specific smooths), while a numeric
-\code{time} uses \code{s(x, k = k) + time + ti(x, time, k = k)}
-(tensor interaction).}
+\item{time}{Optional time variable name (string).}
 
 \item{cluster}{Optional character vector of grouping variable name(s) for
-random intercepts, e.g., \code{NULL}, \code{"id"}, or
-\code{c("id", "schid")}.}
+random effects, e.g. \code{NULL}, \code{"id"}, or
+\code{c("id", "school")} for two-way clustering.}
 
-\item{controls}{Optional character vector of additional covariate names to
-include linearly.}
+\item{nested}{Logical; only used when \code{length(cluster) == 2}. If
+\code{TRUE}, uses a nested specification \code{(1 | g1/g2)}; if
+\code{FALSE} (default), uses cross-classified
+\code{(1 | g1) + (1 | g2)}.}
 
-\item{method}{Either \code{"ns"} (natural spline) or \code{"gam"} (GAM
-smooth). Multilevel fits are currently supported only for \code{"ns"}.}
+\item{controls}{Optional character vector of additional covariate names
+to include as linear fixed effects.}
 
-\item{df}{Degrees of freedom for \code{splines::ns()} when
-\code{method = "ns"}. Must be a single numeric value >= 1. Default
-is \code{4}.}
+\item{method}{Spline basis to use: \code{"ns"} (natural cubic spline,
+default), \code{"bs"} (B-spline), or \code{"gam"} (GAM smooth via
+\code{mgcv::gam()}). Multilevel fits require \code{"ns"} or \code{"bs"}.}
 
-\item{k}{Basis dimension for \code{mgcv::s()} and \code{mgcv::ti()} when
-\code{method = "gam"}. Must be a single numeric value >= 3. Default
-is \code{5}.}
+\item{df}{Degrees of freedom for the spline basis. Supply a single integer
+greater than or equal to 1, or the string \code{"auto"} to trigger
+automatic selection by information criterion. Default \code{4}.}
 
-\item{family}{A model family object, e.g., \code{stats::gaussian()} or
-\code{stats::binomial()}. For multilevel fits, \code{gaussian()} uses
-\code{lme4::lmer()} and non-Gaussian families use \code{lme4::glmer()}.}
+\item{df_range}{Integer vector of candidate df values evaluated when
+\code{df = "auto"}. Default \code{2:8}.}
+
+\item{df_criterion}{Information criterion used for automatic df selection:
+\code{"AIC"} (default) or \code{"BIC"}.}
+
+\item{k}{Basis dimension for \code{mgcv::s()} when \code{method = "gam"}.
+Default \code{5}.}
+
+\item{bs_degree}{Polynomial degree for \code{splines::bs()} when
+\code{method = "bs"}. Default \code{3} (cubic).}
+
+\item{random_slope}{Logical; if \code{TRUE} and \code{cluster} is supplied,
+fits random spline slopes in addition to random intercepts. Currently
+implemented only for single-level clustering. Default \code{FALSE}.}
+
+\item{family}{A family object such as \code{stats::gaussian()} (default)
+or \code{stats::binomial()}. For multilevel fits, \code{gaussian()} uses
+\code{lme4::lmer()} and all other families use \code{lme4::glmer()}.}
 
 \item{...}{Additional arguments passed to the underlying fitting function
 (\code{stats::lm()}, \code{mgcv::gam()}, \code{lme4::lmer()}, or
 \code{lme4::glmer()}).}
 }
 \value{
-An object of class \code{"nl_fit"} (a named list) containing:
-\describe{
-\item{\code{model}}{The fitted model object.}
-\item{\code{method}}{The fitting method used (\code{"ns"} or
-\code{"gam"}).}
-\item{\code{y}}{Name of the outcome variable.}
-\item{\code{x}}{Name of the focal predictor.}
-\item{\code{time}}{Name of the time variable, or \code{NULL}.}
-\item{\code{cluster}}{Character vector of clustering variables, or
-\code{NULL}.}
-\item{\code{controls}}{Character vector of control variable names, or
-\code{NULL}.}
-\item{\code{df}}{Degrees of freedom used for \code{splines::ns()}.}
-\item{\code{k}}{Basis dimension used for \code{mgcv::s()} /
-\code{mgcv::ti()}.}
-\item{\code{family}}{The family object used.}
-\item{\code{formula}}{The model formula passed to the fitter.}
-\item{\code{call}}{The matched call.}
-\item{\code{x_info}}{A list with quantiles and range of \code{x} for
-building prediction grids: \code{q01}, \code{q99}, \code{min},
-\code{max}, \code{n}.}
-\item{\code{levels_info}}{A named list of factor levels for \code{time}
-and any factor control variables.}
-\item{\code{control_defaults}}{A named list of typical values for control
-variables: the mean for numeric variables and the first level for
-factors.}
-}
+An object of class \code{"nl_fit"} (a named list). It contains
+the fitted \code{model} object, the \code{method}, variable names
+(\code{y}, \code{x}, \code{time}, \code{cluster}, \code{controls}),
+spline settings (\code{df}, \code{df_selected}, \code{df_search},
+\code{k}, \code{bs_degree}), flags (\code{nested},
+\code{random_slope}), the \code{family}, the model \code{formula},
+the \code{call}, and metadata used for prediction (\code{x_info},
+\code{levels_info}, \code{control_defaults}).
 }
 \description{
 Fits a nonlinear regression model for an outcome \code{y} with a focal
-predictor \code{x}, modeled either by a natural cubic spline
-(\code{splines::ns()}) or a GAM smooth (\code{mgcv::s()}).
+predictor \code{x}, modeled using natural cubic splines (\code{"ns"}),
+B-splines (\code{"bs"}), or GAM smooths (\code{"gam"}).
 
-Optionally includes a time variable \code{time}. For spline fits
-(\code{method = "ns"}), multilevel random-intercept structure can be added
-via one or more grouping variables in \code{cluster}.
-
-Models fitted:
-\itemize{
-\item Single-level spline: \code{stats::lm()}
-\item Single-level GAM: \code{mgcv::gam()}
-\item Multilevel spline: \code{lme4::lmer()} (Gaussian) or
-\code{lme4::glmer()} (non-Gaussian)
-}
+Version 2 additions: two-way and nested clustering via the
+\code{nested} argument; random spline slopes via \code{random_slope};
+B-spline basis via \code{method = "bs"}; automatic df selection via
+\code{df = "auto"}.
 }
 \examples{
-# --- Toy example (automatically tested by CRAN) ---
-# Single-level natural spline on small simulated data
-set.seed(1)
-mydata <- data.frame(
-  outcome        = rnorm(120),
-  age            = runif(120, 18, 65),
-  id             = rep(1:30, each = 4),
-  wave           = factor(rep(1:4, times = 30)),
-  sex            = factor(sample(c("F", "M"), 120, replace = TRUE)),
-  baseline_score = rnorm(120)
-)
+\dontrun{
+# Single-level natural spline with automatic df selection
+fit <- nl_fit(data = mydata, y = "score", x = "age", df = "auto")
 
-fit_sl <- nl_fit(data = mydata, y = "outcome", x = "age", df = 4)
-
-\donttest{
-# Single-level GAM
-fit_gam <- nl_fit(
-  data   = mydata,
-  y      = "outcome",
-  x      = "age",
-  method = "gam",
-  k      = 5
-)
-
-# Multilevel spline with random intercepts
-fit_ml <- nl_fit(
+# Two-way cross-classified clustering
+fit2 <- nl_fit(
   data    = mydata,
-  y       = "outcome",
+  y       = "score",
   x       = "age",
-  cluster = "id",
-  df      = 4
+  cluster = c("student_id", "school_id"),
+  nested  = FALSE
 )
 
-# Spline with time interaction and controls
-fit_t <- nl_fit(
-  data     = mydata,
-  y        = "outcome",
-  x        = "age",
-  time     = "wave",
-  controls = c("sex", "baseline_score"),
-  df       = 4
+# Nested clustering (students within schools)
+fit3 <- nl_fit(
+  data    = mydata,
+  y       = "score",
+  x       = "age",
+  cluster = c("student_id", "school_id"),
+  nested  = TRUE
+)
+
+# Random spline slopes
+fit4 <- nl_fit(
+  data         = mydata,
+  y            = "score",
+  x            = "age",
+  cluster      = "id",
+  random_slope = TRUE
 )
 }
 
 }
 \seealso{
-\code{\link[splines]{ns}}, \code{\link[mgcv]{gam}},
-\code{\link[lme4]{lmer}}, \code{\link[lme4]{glmer}}
+\code{\link{nl_predict}}, \code{\link{nl_derivatives}},
+\code{\link{nl_compare}}, \code{\link{nl_r2}}, \code{\link{nl_knots}}
 }

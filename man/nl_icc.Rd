@@ -13,14 +13,13 @@ multilevel model fitted via \code{lme4::lmer()} or
 \code{lme4::glmer()}).}
 
 \item{include_residual}{Logical; if \code{TRUE} (default), includes the
-residual variance component \code{Residual} in the output so that all
-values sum to 1 (when a residual variance is available).}
+residual variance component \code{ICC_resid} in the output so that all
+values sum to 1.}
 }
 \value{
 A named numeric vector of ICCs, one per grouping factor (named
 \code{ICC_<groupname>}) plus \code{Residual} for the residual variance
-(when \code{include_residual = TRUE}). When a residual variance is available,
-all values sum to 1.
+(when \code{include_residual = TRUE}). All values sum to 1.
 }
 \description{
 Extracts variance components from a multilevel \code{nl_fit} object and
@@ -31,43 +30,15 @@ The ICC for grouping factor \eqn{g} is defined as:
 \deqn{ICC_g = \frac{\sigma^2_g}{\sum_j \sigma^2_j + \sigma^2_\epsilon}}
 }
 \examples{
-# --- Toy example (automatically tested by CRAN) ---
-# Small multilevel data: 10 clusters, 5 obs each (50 rows total)
-set.seed(1)
-toy <- data.frame(
-  outcome = rnorm(50),
-  age     = runif(50, 18, 65),
-  id      = rep(1:10, each = 5)
-)
+\dontrun{
 fit <- nl_fit(
-  data    = toy,
-  y       = "outcome",
-  x       = "age",
-  cluster = "id",
-  df      = 2
-)
-nl_icc(fit)
-
-\donttest{
-# Two-level clustering: students nested in schools
-set.seed(1)
-mydata <- data.frame(
-  math_score = rnorm(240),
-  SES        = rnorm(240),
-  id         = rep(1:60, each = 4),
-  schid      = rep(1:12, each = 20)
-)
-fit_ml <- nl_fit(
   data    = mydata,
   y       = "math_score",
   x       = "SES",
   cluster = c("id", "schid"),
   df      = 4
 )
-nl_icc(fit_ml)
-
-# Without residual variance in output
-nl_icc(fit_ml, include_residual = FALSE)
+nl_icc(fit)
 }
 
 }

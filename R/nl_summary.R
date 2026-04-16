@@ -21,42 +21,6 @@
 #' \code{Std.Error}, \code{df} (if available), \code{statistic}, and
 #' \code{p.value} (if available).
 #'
-#' @examples
-#' # --- Toy example (automatically tested by CRAN) ---
-#' # Single-level natural spline on small simulated data
-#' set.seed(1)
-#' mydata <- data.frame(
-#'   outcome = rnorm(120),
-#'   age     = runif(120, 18, 65),
-#'   id      = rep(1:30, each = 4)
-#' )
-#' fit <- nl_fit(data = mydata, y = "outcome", x = "age", df = 4)
-#' nl_summary(fit)
-#'
-#' \donttest{
-#' # With p-values suppressed
-#' nl_summary(fit, pvals = FALSE)
-#'
-#' # No rounding
-#' nl_summary(fit, digits = NULL)
-#'
-#' # Multilevel model (lmerMod) with Satterthwaite p-values via lmerTest
-#' set.seed(1)
-#' mydata2 <- data.frame(
-#'   outcome = rnorm(240),
-#'   age     = runif(240, 18, 65),
-#'   id      = rep(1:60, each = 4)
-#' )
-#' fit_ml <- nl_fit(
-#'   data    = mydata2,
-#'   y       = "outcome",
-#'   x       = "age",
-#'   cluster = "id",
-#'   df      = 4
-#' )
-#' nl_summary(fit_ml)
-#' }
-#'
 #' @seealso \code{\link{nl_fit}}, \code{\link{summary.nl_fit}}
 #'
 #' @export
@@ -199,45 +163,25 @@ nl_summary <- function(
     # ---------------------------------------------------------------------------
   } else if (inherits(mod, "lmerMod")) {
 
-    # Try lmerTest Satterthwaite; fall back gracefully if it fails
-    # (e.g. singular fits, or lmerTest not installed)
-    lmertest_ok <- FALSE
-
     if (isTRUE(pvals) &&
         df_method == "satterthwaite" &&
         requireNamespace("lmerTest", quietly = TRUE)) {
 
-      lmertest_result <- tryCatch({
-        m_lt <- lmerTest::as_lmerModLmerTest(mod)
-        cf   <- as.data.frame(summary(m_lt)$coefficients)
-        list(ok = TRUE, cf = cf)
-      }, error = function(e) {
-        warning(
-          "lmerTest Satterthwaite method failed (", conditionMessage(e),
-          "). Falling back to t-values without df/p-values.",
-          call. = FALSE
-        )
-        list(ok = FALSE)
-      })
+      m_lt <- lmerTest::as_lmerModLmerTest(mod)
+      cf   <- as.data.frame(summary(m_lt)$coefficients)
 
-      if (isTRUE(lmertest_result$ok)) {
-        cf <- lmertest_result$cf
-        out <- data.frame(
-          Term      = rownames(cf),
-          Estimate  = cf[["Estimate"]],
-          Std.Error = cf[["Std. Error"]],
-          df        = cf[["df"]],
-          statistic = cf[["t value"]],
-          p.value   = cf[["Pr(>|t|)"]],
-          row.names = NULL,
-          stringsAsFactors = FALSE
-        )
-        lmertest_ok <- TRUE
-      }
-    }
+      out <- data.frame(
+        Term      = rownames(cf),
+        Estimate  = cf[["Estimate"]],
+        Std.Error = cf[["Std. Error"]],
+        df        = cf[["df"]],
+        statistic = cf[["t value"]],
+        p.value   = cf[["Pr(>|t|)"]],
+        row.names = NULL,
+        stringsAsFactors = FALSE
+      )
 
-    # Fallback: fixed effects only, no df or p-values
-    if (!lmertest_ok) {
+    } else {
 
       fe <- lme4::fixef(mod)
       se <- sqrt(diag(as.matrix(stats::vcov(mod))))

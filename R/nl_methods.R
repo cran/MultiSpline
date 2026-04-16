@@ -58,14 +58,26 @@ print.nl_fit <- function(x, ...) {
     cat("(formula unavailable)\n")
   }
 
-  cat("\nNext steps:\n")
-  cat("  nl_summary(fit)        # tidy coefficient table\n")
-  cat("  summary(fit)           # same via S3 summary method\n")
-  cat("  nl_predict(fit, ...)   # prediction grid\n")
-  cat("  nl_plot(pred, ...)     # visualization\n")
+  cat("\nNext steps (v2):\n")
+  cat("  nl_summary(fit)               # tidy coefficient table\n")
+  cat("  nl_predict(fit)               # prediction grid with CI\n")
+  cat("  nl_plot(pred_df, x = ...)     # trajectory / slope / curvature\n")
+  cat("  nl_derivatives(pred_df, x)   # d1 / d2 with confidence bands\n")
+  cat("  nl_turning_points(deriv_df)   # maxima, minima, inflection regions\n")
+  cat("  nl_compare(fit)               # spline vs linear vs polynomial\n")
+  cat("  nl_r2(fit)                    # R2 / multilevel variance decomposition\n")
+  cat("  nl_knots(data, ...)           # explore df / knot selection\n")
 
   if (!is.null(x$cluster) && length(x$cluster) > 0L) {
-    cat("  nl_icc(fit)            # intraclass correlation\n")
+    cat("  nl_icc(fit)                   # intraclass correlation\n")
+    cat("  nl_het(fit)                   # cluster heterogeneity in nonlinear effect\n")
+  }
+
+  if (!is.null(x$df_search)) {
+    cat(sprintf("\n  Auto-selected df = %d  (best %s = %.2f)\n",
+                x$df_selected,
+                names(x$df_search)[2],
+                min(x$df_search[[2]], na.rm = TRUE)))
   }
 
   invisible(x)

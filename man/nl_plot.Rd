@@ -2,106 +2,78 @@
 % Please edit documentation in R/nl_plot.R
 \name{nl_plot}
 \alias{nl_plot}
-\title{Plot predictions from nl_predict()}
+\title{Plot predictions and derivatives from nl_fit models}
 \usage{
 nl_plot(
-  pred_df,
+  pred_df = NULL,
+  deriv_df = NULL,
   x,
   time = NULL,
+  type = c("trajectory", "slope", "curvature", "combo"),
   show_ci = TRUE,
   ci_level = 0.95,
-  y_lab = "Predicted outcome",
+  show_turning_points = FALSE,
+  turning_points = NULL,
+  zero_line = TRUE,
+  y_lab = NULL,
   x_lab = NULL,
   title = NULL,
   legend_title = NULL
 )
 }
 \arguments{
-\item{pred_df}{A data frame returned by \code{\link{nl_predict}}. Must
-contain at minimum columns \code{fit} and the focal predictor \code{x}.
-For confidence bands, provide either \code{lwr}/\code{upr} or
-\code{se.fit}.}
+\item{pred_df}{A data frame from \code{\link{nl_predict}} (for
+\code{type = "trajectory"} or \code{"combo"}).}
 
-\item{x}{Character string naming the focal predictor column in
-\code{pred_df}.}
+\item{deriv_df}{A data frame from \code{\link{nl_derivatives}} (for
+\code{type = "slope"}, \code{"curvature"}, or \code{"combo"}).}
 
-\item{time}{Optional character string naming the time variable column in
-\code{pred_df}. If \code{NULL}, the function will try to auto-detect a
-sensible time column (e.g., \code{"TimePoint"}, \code{"time"},
-\code{"wave"}) if present.}
+\item{x}{Character; name of the focal predictor column in \code{pred_df} /
+\code{deriv_df}.}
 
-\item{show_ci}{Logical; if \code{TRUE}, adds a confidence ribbon. Default
-\code{TRUE}.}
+\item{time}{Optional character; name of the time column. Auto-detected if
+\code{NULL}.}
 
-\item{ci_level}{Numeric in (0, 1); confidence level used when computing CI
-from \code{se.fit}. Default \code{0.95}.}
+\item{type}{Plot type: \code{"trajectory"} (default), \code{"slope"},
+\code{"curvature"}, or \code{"combo"}.}
 
-\item{y_lab}{Character label for the y-axis. Default
-\code{"Predicted outcome"}.}
+\item{show_ci}{Logical; add confidence ribbons. Default \code{TRUE}.}
 
-\item{x_lab}{Character label for the x-axis. Defaults to the value of
-\code{x}.}
+\item{ci_level}{Numeric; confidence level when deriving CI from
+\code{se.fit}. Default \code{0.95}.}
 
-\item{title}{Optional plot title string.}
+\item{show_turning_points}{Logical; overlay turning-point markers on the
+trajectory plot. Default \code{FALSE}.}
 
-\item{legend_title}{Optional legend title string. Defaults to the value of
-\code{time}.}
+\item{turning_points}{Data frame from \code{\link{nl_turning_points}} (only
+used when \code{show_turning_points = TRUE}).}
+
+\item{zero_line}{Logical; for slope / curvature plots, draw a dashed
+horizontal line at zero. Default \code{TRUE}.}
+
+\item{y_lab}{Y-axis label.}
+
+\item{x_lab}{X-axis label. Defaults to \code{x}.}
+
+\item{title}{Optional plot title.}
+
+\item{legend_title}{Optional legend title.}
 }
 \value{
-A \code{ggplot} object.
+A \code{ggplot} object (or a combined plot list for \code{"combo"}).
 }
 \description{
-Visualizes predicted nonlinear effects returned by
-\code{\link{nl_predict}}. If a time variable is present (or detected),
-draws separate colored curves for each time level with optional confidence
-ribbons.
+Visualises results from \code{\link{nl_predict}} or
+\code{\link{nl_derivatives}}.  The \code{type} argument selects the plot:
+\itemize{
+\item \code{"trajectory"}: predicted outcome vs \code{x} with optional
+confidence ribbon (v1 behaviour, now default).
+\item \code{"slope"}: first derivative (marginal effect) vs \code{x}.
+\item \code{"curvature"}: second derivative vs \code{x}.
+\item \code{"combo"}: trajectory + slope panels side by side.
 }
-\examples{
-# --- Toy example (automatically tested by CRAN) ---
-# Single-level spline: fit, predict, then plot
-set.seed(1)
-mydata <- data.frame(
-  outcome = rnorm(120),
-  age     = runif(120, 18, 65),
-  id      = rep(1:30, each = 4)
-)
-fit  <- nl_fit(data = mydata, y = "outcome", x = "age", df = 4)
-pred <- nl_predict(fit)
-nl_plot(pred, x = "age")
-
-\donttest{
-# Custom axis labels and title
-nl_plot(
-  pred,
-  x     = "age",
-  y_lab = "Predicted Math Score",
-  x_lab = "Age (years)",
-  title = "Nonlinear Effect of Age"
-)
-
-# Without confidence ribbon
-nl_plot(pred, x = "age", show_ci = FALSE)
-
-# With time variable: separate curves per wave
-set.seed(1)
-mydata2 <- data.frame(
-  outcome = rnorm(120),
-  age     = runif(120, 18, 65),
-  id      = rep(1:30, each = 4),
-  wave    = factor(rep(1:4, times = 30))
-)
-fit_t  <- nl_fit(
-  data = mydata2,
-  y    = "outcome",
-  x    = "age",
-  time = "wave",
-  df   = 4
-)
-pred_t <- nl_predict(fit_t)
-nl_plot(pred_t, x = "age", time = "wave", legend_title = "Wave")
-}
-
 }
 \seealso{
-\code{\link{nl_predict}}, \code{\link{nl_fit}}
+\code{\link{nl_predict}}, \code{\link{nl_derivatives}},
+\code{\link{nl_turning_points}}
 }
