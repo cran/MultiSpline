@@ -12,6 +12,7 @@ nl_knots(
   cluster = NULL,
   nested = FALSE,
   controls = NULL,
+  random = NULL,
   method = c("ns", "bs"),
   df_range = 2:10,
   criterion = c("AIC", "BIC"),
@@ -35,6 +36,9 @@ nl_knots(
 
 \item{controls}{Optional character vector of control variable names.}
 
+\item{random}{Optional full random-effects string, as in
+\code{\link{nl_fit}}.}
+
 \item{method}{Either \code{"ns"} (default) or \code{"bs"}.}
 
 \item{df_range}{Integer vector of candidate df values. Default \code{2:10}.}
@@ -50,24 +54,30 @@ vs df. Default \code{TRUE}.}
 }
 \value{
 A list with:
-\describe{
-\item{\code{best_df}}{The df value with the lowest criterion value.}
-\item{\code{search_table}}{Data frame with columns \code{df} and
-\code{criterion}.}
-\item{\code{criterion}}{The criterion used (\code{"AIC"} or
-\code{"BIC"}).}
-\item{\code{plot}}{A \code{ggplot} object (if \code{plot = TRUE}).}
-}
+  \describe{
+    \item{\code{best_df}}{The df value with the lowest criterion value.}
+    \item{\code{search_table}}{Data frame with columns \code{df} and
+      \code{criterion}.}
+    \item{\code{criterion}}{The criterion used (\code{"AIC"} or
+      \code{"BIC"}).}
+    \item{\code{plot}}{A \code{ggplot} object (if \code{plot = TRUE}).}
+  }
 }
 \description{
 Performs a grid search over candidate degrees of freedom (df) for a
 natural cubic spline (\code{"ns"}) or B-spline (\code{"bs"}) model and
 selects the best value by an information criterion (AIC or BIC). A
-diagnostic plot of the criterion against df is returned.
+diagnostic plot of the criterion against df is returned. Mixed models
+are fitted by maximum likelihood for this search, because REML criteria
+are not comparable across different fixed effects.
 
 This function is called internally by \code{\link{nl_fit}} when
 \code{df = "auto"}, but it can also be called directly for exploration
 before fitting the final model.
+}
+\examples{
+nl_knots(mtcars, y = "mpg", x = "hp", df_range = 2:5, plot = FALSE)
+
 }
 \seealso{
 \code{\link{nl_fit}}, \code{\link{nl_compare}}

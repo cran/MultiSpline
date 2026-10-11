@@ -15,8 +15,8 @@
 #'   \code{type = "trajectory"} or \code{"combo"}).
 #' @param deriv_df A data frame from \code{\link{nl_derivatives}} (for
 #'   \code{type = "slope"}, \code{"curvature"}, or \code{"combo"}).
-#' @param x Character; name of the focal predictor column in \code{pred_df} /
-#'   \code{deriv_df}.
+#' @param x Character; name of the focal predictor column. Taken from the
+#'   \code{nl_predict()} / \code{nl_derivatives()} output by default.
 #' @param time Optional character; name of the time column. Auto-detected if
 #'   \code{NULL}.
 #' @param type Plot type: \code{"trajectory"} (default), \code{"slope"},
@@ -35,17 +35,26 @@
 #' @param title Optional plot title.
 #' @param legend_title Optional legend title.
 #'
-#' @return A \code{ggplot} object (or a combined plot list for \code{"combo"}).
+#' @return A \code{ggplot} object. For \code{"combo"}, a single combined
+#'   figure if \pkg{patchwork} is installed, otherwise a list of two plots.
 #'
 #' @seealso \code{\link{nl_predict}}, \code{\link{nl_derivatives}},
 #'   \code{\link{nl_turning_points}}
 #'
 #' @importFrom rlang .data
+#' @examples
+#' fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+#'               cluster = "Subject", df = 3)
+#' pred  <- nl_predict(fit)
+#' deriv <- nl_derivatives(fit)
+#' nl_plot(pred)
+#' nl_plot(deriv_df = deriv, type = "slope")
+#'
 #' @export
 nl_plot <- function(
     pred_df          = NULL,
     deriv_df         = NULL,
-    x,
+    x                = NULL,
     time             = NULL,
     type             = c("trajectory", "slope", "curvature", "combo"),
     show_ci          = TRUE,
@@ -60,6 +69,9 @@ nl_plot <- function(
 ) {
 
   type <- match.arg(type)
+  if (is.null(x)) x <- attr(pred_df, "x") %||% attr(deriv_df, "x")
+  if (is.null(x))
+    stop("Supply `x`, the name of the focal predictor.", call. = FALSE)
 
   # Auto-detect time
   .detect_time <- function(df) {
@@ -69,7 +81,8 @@ nl_plot <- function(
     if (length(hit)) hit[1L] else NULL
   }
   if (is.null(time)) {
-    time <- .detect_time(pred_df) %||% .detect_time(deriv_df)
+    time <- attr(pred_df, "time") %||% attr(deriv_df, "time") %||%
+      .detect_time(pred_df) %||% .detect_time(deriv_df)
   }
 
   if (is.null(x_lab)) x_lab <- x
@@ -176,7 +189,7 @@ nl_plot <- function(
       ggplot2::labs(
         x     = x_lab,
         y     = if (!is.null(y_lab)) y_lab else paste0("dy / d(", x, ")"),
-        title = title %||% paste0("Marginal Effect (First Derivative)  of ", x),
+        title = title %||% paste0("Marginal Effect (First Derivative) of ", x),
         color = legend_title, fill = legend_title
       )
     p
@@ -212,7 +225,12 @@ nl_plot <- function(
     combo      = {
       p1 <- .plot_traj()
       p2 <- .plot_slope()
-      list(trajectory = p1, slope = p2)
+      if (requireNamespace("patchwork", quietly = TRUE)) {
+        patchwork::wrap_plots(p1, p2, nrow = 1L)
+      } else {
+        message("Install 'patchwork' to combine the panels; returning a list.")
+        list(trajectory = p1, slope = p2)
+      }
     }
   )
 }

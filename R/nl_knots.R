@@ -4,7 +4,9 @@
 #' Performs a grid search over candidate degrees of freedom (df) for a
 #' natural cubic spline (\code{"ns"}) or B-spline (\code{"bs"}) model and
 #' selects the best value by an information criterion (AIC or BIC). A
-#' diagnostic plot of the criterion against df is returned.
+#' diagnostic plot of the criterion against df is returned. Mixed models
+#' are fitted by maximum likelihood for this search, because REML criteria
+#' are not comparable across different fixed effects.
 #'
 #' This function is called internally by \code{\link{nl_fit}} when
 #' \code{df = "auto"}, but it can also be called directly for exploration
@@ -16,6 +18,8 @@
 #' @param time Optional time variable name.
 #' @param cluster Optional character vector of cluster variable names.
 #' @param nested Logical; nested clustering. Default \code{FALSE}.
+#' @param random Optional full random-effects string, as in
+#'   \code{\link{nl_fit}}.
 #' @param controls Optional character vector of control variable names.
 #' @param method Either \code{"ns"} (default) or \code{"bs"}.
 #' @param df_range Integer vector of candidate df values. Default \code{2:10}.
@@ -37,6 +41,9 @@
 #'
 #' @seealso \code{\link{nl_fit}}, \code{\link{nl_compare}}
 #'
+#' @examples
+#' nl_knots(mtcars, y = "mpg", x = "hp", df_range = 2:5, plot = FALSE)
+#'
 #' @export
 nl_knots <- function(
     data,
@@ -46,6 +53,7 @@ nl_knots <- function(
     cluster   = NULL,
     nested    = FALSE,
     controls  = NULL,
+    random    = NULL,
     method    = c("ns", "bs"),
     df_range  = 2:10,
     criterion = c("AIC", "BIC"),
@@ -69,7 +77,8 @@ nl_knots <- function(
         cluster = cluster, nested = nested,
         controls = controls, method = method, df = dfi,
         k = 5L, bs_degree = 3L,
-        random_slope = FALSE, family = family, dots = dots
+        random_slope = FALSE, family = family, dots = dots,
+        REML = FALSE, random = random
       )
       if (criterion == "AIC") stats::AIC(mod) else stats::BIC(mod)
     }, error = function(e) NA_real_)

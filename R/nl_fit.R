@@ -5,10 +5,23 @@
 #' predictor \code{x}, modeled using natural cubic splines (\code{"ns"}),
 #' B-splines (\code{"bs"}), or GAM smooths (\code{"gam"}).
 #'
-#' Version 2 additions: two-way and nested clustering via the
-#' \code{nested} argument; random spline slopes via \code{random_slope};
-#' B-spline basis via \code{method = "bs"}; automatic df selection via
-#' \code{df = "auto"}.
+#' Mixed models are fitted with \code{lme4}. The level structure can be given
+#' simply through \code{cluster} (one grouping variable, or two that are
+#' nested or crossed) or in full through \code{random}, which accepts any
+#' \code{lme4} random-effects specification.
+#'
+#' @section Spline basis:
+#' \code{method = "ns"} uses \code{splines::ns()}: a natural cubic spline
+#' (cubic between knots, linear beyond the boundary knots). Interior knots
+#' are placed at equally spaced quantiles of \code{x}; the boundary knots
+#' are the range of \code{x}. \code{df} is the number of basis columns
+#' (interior knots = \code{df - 1}). With the same knots it spans the same
+#' functions as Stata's restricted cubic splines (\code{mkspline, cubic},
+#' \code{makespline rcs}); the defaults differ only in knot placement
+#' (Stata puts the outer knots at percentiles, \code{ns()} at the range).
+#' The basis computed on
+#' the estimation data is stored in the model and reused for every
+#' prediction and derivative.
 #'
 #' @param data A data frame (often long format for longitudinal data).
 #' @param y Outcome variable name (string).
@@ -17,12 +30,23 @@
 #' @param cluster Optional character vector of grouping variable name(s) for
 #'   random effects, e.g. \code{NULL}, \code{"id"}, or
 #'   \code{c("id", "school")} for two-way clustering.
+#' @param random Optional character string giving the full random-effects
+#'   part of an \code{lme4} formula, e.g. \code{"(1 | school/student)"} or
+#'   \code{"(1 | idcode) + (1 | indcode)"}. When supplied it overrides
+#'   \code{cluster}, \code{nested}, and \code{random_slope}, so any level
+#'   structure that \code{lme4} accepts can be used. Grouping variables are
+#'   read from the string.
 #' @param nested Logical; only used when \code{length(cluster) == 2}. If
-#'   \code{TRUE}, uses a nested specification \code{(1 | g1/g2)}; if
+#'   \code{TRUE}, the first grouping variable is nested within the second:
+#'   \code{cluster = c("student", "school")} gives
+#'   \code{(1 | school/student)}. (Version 0.2.0 built the reverse,
+#'   \code{(1 | student/school)}, which omitted the school effect.) If
 #'   \code{FALSE} (default), uses cross-classified
-#'   \code{(1 | g1) + (1 | g2)}.
-#' @param controls Optional character vector of additional covariate names
-#'   to include as linear fixed effects.
+#'   \code{(1 | g1) + (1 | g2)}. For anything more complex use \code{random}.
+#' @param controls Optional character vector of additional fixed-effect
+#'   terms. Plain variable names and expressions are both accepted, e.g.
+#'   \code{c("age", "factor(race)", "I(age^2)")}. Factor and character
+#'   variables are expanded to indicator columns automatically.
 #' @param method Spline basis to use: \code{"ns"} (natural cubic spline,
 #'   default), \code{"bs"} (B-spline), or \code{"gam"} (GAM smooth via
 #'   \code{mgcv::gam()}). Multilevel fits require \code{"ns"} or \code{"bs"}.
@@ -43,6 +67,10 @@
 #' @param family A family object such as \code{stats::gaussian()} (default)
 #'   or \code{stats::binomial()}. For multilevel fits, \code{gaussian()} uses
 #'   \code{lme4::lmer()} and all other families use \code{lme4::glmer()}.
+#' @param REML Logical; for Gaussian mixed models, fit the final model by
+#'   REML (default \code{TRUE}). Automatic df selection and all model
+#'   comparisons always use maximum likelihood, because REML likelihoods
+#'   are not comparable across different fixed effects.
 #' @param ... Additional arguments passed to the underlying fitting function
 #'   (\code{stats::lm()}, \code{mgcv::gam()}, \code{lme4::lmer()}, or
 #'   \code{lme4::glmer()}).
@@ -60,37 +88,17 @@
 #'   \code{\link{nl_compare}}, \code{\link{nl_r2}}, \code{\link{nl_knots}}
 #'
 #' @examples
-#' \dontrun{
-#' # Single-level natural spline with automatic df selection
-#' fit <- nl_fit(data = mydata, y = "score", x = "age", df = "auto")
+#' # Single-level natural spline
+#' fit1 <- nl_fit(mtcars, y = "mpg", x = "hp", df = 3)
+#' fit1
 #'
-#' # Two-way cross-classified clustering
-#' fit2 <- nl_fit(
-#'   data    = mydata,
-#'   y       = "score",
-#'   x       = "age",
-#'   cluster = c("student_id", "school_id"),
-#'   nested  = FALSE
-#' )
+#' # Repeated measures: days nested in subjects
+#' fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+#'               cluster = "Subject", df = 3)
 #'
-#' # Nested clustering (students within schools)
-#' fit3 <- nl_fit(
-#'   data    = mydata,
-#'   y       = "score",
-#'   x       = "age",
-#'   cluster = c("student_id", "school_id"),
-#'   nested  = TRUE
-#' )
-#'
-#' # Random spline slopes
-#' fit4 <- nl_fit(
-#'   data         = mydata,
-#'   y            = "score",
-#'   x            = "age",
-#'   cluster      = "id",
-#'   random_slope = TRUE
-#' )
-#' }
+#' # Any lme4 random-effects structure via `random`
+#' fit2 <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+#'                random = "(1 | Subject)", df = 3)
 #'
 #' @export
 nl_fit <- function(
@@ -101,6 +109,7 @@ nl_fit <- function(
     cluster      = NULL,
     nested       = FALSE,
     controls     = NULL,
+    random       = NULL,
     method       = c("ns", "bs", "gam"),
     df           = 4,
     df_range     = 2:8,
@@ -109,6 +118,7 @@ nl_fit <- function(
     bs_degree    = 3,
     random_slope = FALSE,
     family       = stats::gaussian(),
+    REML         = TRUE,
     ...
 ) {
 
@@ -136,15 +146,39 @@ nl_fit <- function(
     if (any(!nzchar(cluster)))
       stop("`cluster` contains empty strings.", call. = FALSE)
     cluster <- unique(cluster)
-    if (length(cluster) > 2L)
-      stop("MultiSpline v2 supports up to two clustering levels.", call. = FALSE)
+    if (length(cluster) > 2L && is.null(random))
+      stop("`cluster` supports up to two grouping variables; use `random` ",
+           "for more complex structures.", call. = FALSE)
   }
 
+  if (!is.null(random)) {
+    if (!is.character(random) || length(random) != 1L || !nzchar(random))
+      stop("`random` must be a single string such as \"(1 | school/student)\".",
+           call. = FALSE)
+    bars <- tryCatch(
+      .findbars(stats::as.formula(paste("~", random))),
+      error = function(e) NULL)
+    if (!length(bars))
+      stop("`random` contains no random-effects terms of the form (... | g).",
+           call. = FALSE)
+    cluster <- unique(unlist(lapply(bars, function(b) all.vars(b[[3L]]))))
+    random_slope <- FALSE
+    nested <- FALSE
+  }
+
+  ctrl_vars <- NULL
   if (!is.null(controls)) {
     if (!is.character(controls))
       stop("`controls` must be NULL or a character vector.", call. = FALSE)
     controls <- unique(controls[nzchar(controls)])
     if (length(controls) == 0L) controls <- NULL
+  }
+  if (!is.null(controls)) {
+    ctrl_vars <- unique(unlist(lapply(controls, function(z) {
+      e <- tryCatch(str2lang(z), error = function(err)
+        stop("Cannot parse control term `", z, "`.", call. = FALSE))
+      all.vars(e)
+    })))
   }
 
   # df can be a number or "auto"
@@ -172,7 +206,7 @@ nl_fit <- function(
   # ---------------------------------------------------------------------------
   # 1) Check variable existence in data
   # ---------------------------------------------------------------------------
-  needed       <- unique(c(y, x, time, controls, cluster))
+  needed       <- unique(c(y, x, time, ctrl_vars, cluster))
   missing_vars <- setdiff(needed, names(data))
   if (length(missing_vars) > 0L)
     stop("Variables not in `data`: ",
@@ -185,8 +219,16 @@ nl_fit <- function(
   x_vec <- data[[x]]
   if (all(!is.finite(x_vec)))
     stop("`x` contains no finite values.", call. = FALSE)
+  n_unique_x <- length(unique(x_vec[is.finite(x_vec)]))
+  df_check <- if (auto_df) max(df_range) else df
+  if (method != "gam" && n_unique_x < df_check + 3L)
+    warning("`x` has only ", n_unique_x, " distinct values; a spline with df = ",
+            df_check, " is barely identified. Splines are meant for ",
+            "(near-)continuous predictors; consider fewer df or treating `x` ",
+            "as a factor.", call. = FALSE)
 
-  is_multilevel <- !is.null(cluster) && length(cluster) >= 1L
+  is_multilevel <- (!is.null(cluster) && length(cluster) >= 1L) ||
+    !is.null(random)
 
   # ---------------------------------------------------------------------------
   # 2) Automatic df selection
@@ -206,7 +248,8 @@ nl_fit <- function(
           cluster = cluster, nested = nested,
           controls = controls, method = method, df = dfi,
           k = k, bs_degree = bs_degree,
-          random_slope = random_slope, family = family, dots = list(...)
+          random_slope = random_slope, family = family, dots = list(...),
+          random = random, REML = FALSE
         )
         if (df_criterion == "AIC") stats::AIC(tmp) else stats::BIC(tmp)
       }, error = function(e) NA_real_)
@@ -220,7 +263,7 @@ nl_fit <- function(
            call. = FALSE)
     df <- df_cands[best_idx]
     message("Auto knot selection: best df = ", df,
-            " (", df_criterion, " = ", round(crit_vals[best_idx], 2), ")")
+            " (ML ", df_criterion, " = ", round(crit_vals[best_idx], 2), ")")
   }
 
   # ---------------------------------------------------------------------------
@@ -231,7 +274,8 @@ nl_fit <- function(
     cluster = cluster, nested = nested,
     controls = controls, method = method, df = df,
     k = k, bs_degree = bs_degree,
-    random_slope = random_slope, family = family, dots = list(...)
+    random_slope = random_slope, family = family, dots = list(...),
+    random = random, REML = REML
   )
 
   form <- tryCatch(stats::formula(model), error = function(e) NULL)
@@ -257,8 +301,8 @@ nl_fit <- function(
   if (!is.null(time) && is.factor(data[[time]]))
     levels_info[[time]] <- levels(data[[time]])
 
-  if (!is.null(controls)) {
-    for (cn in controls) {
+  if (!is.null(ctrl_vars)) {
+    for (cn in ctrl_vars) {
       vec <- data[[cn]]
       if (is.factor(vec)) {
         levels_info[[cn]] <- levels(vec)
@@ -290,6 +334,8 @@ nl_fit <- function(
       cluster          = if (is_multilevel) cluster else NULL,
       nested           = nested,
       controls         = controls,
+      control_vars     = ctrl_vars,
+      random           = random,
       df               = df,
       df_selected      = df,
       df_search        = df_search,
@@ -301,7 +347,8 @@ nl_fit <- function(
       call             = match.call(),
       x_info           = x_info,
       levels_info      = levels_info,
-      control_defaults = control_defaults
+      control_defaults = control_defaults,
+      data             = data[, intersect(needed, names(data)), drop = FALSE]
     ),
     class = "nl_fit"
   )
@@ -313,9 +360,10 @@ nl_fit <- function(
 # ============================================================
 .build_and_fit <- function(data, y, x, time, cluster, nested,
                            controls, method, df, k, bs_degree,
-                           random_slope, family, dots) {
+                           random_slope, family, dots,
+                           random = NULL, REML = TRUE) {
 
-  is_ml <- !is.null(cluster) && length(cluster) >= 1L
+  is_ml <- (!is.null(cluster) && length(cluster) >= 1L) || !is.null(random)
 
   # Fixed-effects spline term
   main_part <- switch(method,
@@ -353,10 +401,9 @@ nl_fit <- function(
     form     <- stats::as.formula(paste0(y, " ~ ", fixed_part),
                                   env = form_env)
     if (method == "gam") {
-      do.call(mgcv::gam,
-              c(list(formula = form, data = data, family = family), dots))
+      .fit_call(quote(mgcv::gam), form, data, c(list(family = family), dots))
     } else {
-      do.call(stats::lm, c(list(formula = form, data = data), dots))
+      .fit_call(quote(stats::lm), form, data, dots)
     }
 
   } else {
@@ -364,7 +411,7 @@ nl_fit <- function(
     if (method == "gam")
       stop("Multilevel support requires method = 'ns' or 'bs'.", call. = FALSE)
 
-    rand_part <- .build_rand_formula(
+    rand_part <- if (!is.null(random)) random else .build_rand_formula(
       cluster      = cluster,
       nested       = nested,
       x            = x,
@@ -379,10 +426,9 @@ nl_fit <- function(
     )
 
     if (identical(family$family, "gaussian")) {
-      do.call(lme4::lmer, c(list(formula = form, data = data), dots))
+      .fit_call(quote(lme4::lmer), form, data, c(list(REML = REML), dots))
     } else {
-      do.call(lme4::glmer,
-              c(list(formula = form, data = data, family = family), dots))
+      .fit_call(quote(lme4::glmer), form, data, c(list(family = family), dots))
     }
   }
 }
@@ -402,7 +448,8 @@ nl_fit <- function(
       rand_part <- paste0("(1 | ", cluster[1L], ")")
     } else {
       rand_part <- if (nested) {
-        paste0("(1 | ", cluster[1L], "/", cluster[2L], ")")
+        # cluster = c(lower, higher): lower nested within higher
+        paste0("(1 | ", cluster[2L], "/", cluster[1L], ")")
       } else {
         paste0("(1 | ", cluster[1L], ") + (1 | ", cluster[2L], ")")
       }
@@ -419,4 +466,12 @@ nl_fit <- function(
   }
 
   rand_part
+}
+
+
+# Evaluate a model-fitting call with `data` referenced by name, so the stored
+# call (shown by print(), summary(), anova()) does not contain the data.
+.fit_call <- function(fun, form, data, args = list()) {
+  cl <- as.call(c(list(fun, formula = form, data = quote(data)), args))
+  eval(cl)
 }

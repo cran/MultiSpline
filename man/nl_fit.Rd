@@ -12,6 +12,7 @@ nl_fit(
   cluster = NULL,
   nested = FALSE,
   controls = NULL,
+  random = NULL,
   method = c("ns", "bs", "gam"),
   df = 4,
   df_range = 2:8,
@@ -20,6 +21,7 @@ nl_fit(
   bs_degree = 3,
   random_slope = FALSE,
   family = stats::gaussian(),
+  REML = TRUE,
   ...
 )
 }
@@ -37,12 +39,24 @@ random effects, e.g. \code{NULL}, \code{"id"}, or
 \code{c("id", "school")} for two-way clustering.}
 
 \item{nested}{Logical; only used when \code{length(cluster) == 2}. If
-\code{TRUE}, uses a nested specification \code{(1 | g1/g2)}; if
+\code{TRUE}, the first grouping variable is nested within the second:
+\code{cluster = c("student", "school")} gives
+\code{(1 | school/student)}. (Version 0.2.0 built the reverse,
+\code{(1 | student/school)}, which omitted the school effect.) If
 \code{FALSE} (default), uses cross-classified
-\code{(1 | g1) + (1 | g2)}.}
+\code{(1 | g1) + (1 | g2)}. For anything more complex use \code{random}.}
 
-\item{controls}{Optional character vector of additional covariate names
-to include as linear fixed effects.}
+\item{controls}{Optional character vector of additional fixed-effect
+terms. Plain variable names and expressions are both accepted, e.g.
+\code{c("age", "factor(race)", "I(age^2)")}. Factor and character
+variables are expanded to indicator columns automatically.}
+
+\item{random}{Optional character string giving the full random-effects
+part of an \code{lme4} formula, e.g. \code{"(1 | school/student)"} or
+\code{"(1 | idcode) + (1 | indcode)"}. When supplied it overrides
+\code{cluster}, \code{nested}, and \code{random_slope}, so any level
+structure that \code{lme4} accepts can be used. Grouping variables are
+read from the string.}
 
 \item{method}{Spline basis to use: \code{"ns"} (natural cubic spline,
 default), \code{"bs"} (B-spline), or \code{"gam"} (GAM smooth via
@@ -72,65 +86,65 @@ implemented only for single-level clustering. Default \code{FALSE}.}
 or \code{stats::binomial()}. For multilevel fits, \code{gaussian()} uses
 \code{lme4::lmer()} and all other families use \code{lme4::glmer()}.}
 
+\item{REML}{Logical; for Gaussian mixed models, fit the final model by
+REML (default \code{TRUE}). Automatic df selection and all model
+comparisons always use maximum likelihood, because REML likelihoods
+are not comparable across different fixed effects.}
+
 \item{...}{Additional arguments passed to the underlying fitting function
 (\code{stats::lm()}, \code{mgcv::gam()}, \code{lme4::lmer()}, or
 \code{lme4::glmer()}).}
 }
 \value{
 An object of class \code{"nl_fit"} (a named list). It contains
-the fitted \code{model} object, the \code{method}, variable names
-(\code{y}, \code{x}, \code{time}, \code{cluster}, \code{controls}),
-spline settings (\code{df}, \code{df_selected}, \code{df_search},
-\code{k}, \code{bs_degree}), flags (\code{nested},
-\code{random_slope}), the \code{family}, the model \code{formula},
-the \code{call}, and metadata used for prediction (\code{x_info},
-\code{levels_info}, \code{control_defaults}).
+  the fitted \code{model} object, the \code{method}, variable names
+  (\code{y}, \code{x}, \code{time}, \code{cluster}, \code{controls}),
+  spline settings (\code{df}, \code{df_selected}, \code{df_search},
+  \code{k}, \code{bs_degree}), flags (\code{nested},
+  \code{random_slope}), the \code{family}, the model \code{formula},
+  the \code{call}, and metadata used for prediction (\code{x_info},
+  \code{levels_info}, \code{control_defaults}).
 }
 \description{
 Fits a nonlinear regression model for an outcome \code{y} with a focal
 predictor \code{x}, modeled using natural cubic splines (\code{"ns"}),
 B-splines (\code{"bs"}), or GAM smooths (\code{"gam"}).
 
-Version 2 additions: two-way and nested clustering via the
-\code{nested} argument; random spline slopes via \code{random_slope};
-B-spline basis via \code{method = "bs"}; automatic df selection via
-\code{df = "auto"}.
+Mixed models are fitted with \code{lme4}. The level structure can be given
+simply through \code{cluster} (one grouping variable, or two that are
+nested or crossed) or in full through \code{random}, which accepts any
+\code{lme4} random-effects specification.
 }
+\section{Spline basis}{
+
+\code{method = "ns"} uses \code{splines::ns()}: a natural cubic spline
+(cubic between knots, linear beyond the boundary knots). Interior knots
+are placed at equally spaced quantiles of \code{x}; the boundary knots
+are the range of \code{x}. \code{df} is the number of basis columns
+(interior knots = \code{df - 1}). With the same knots it spans the same
+functions as Stata's restricted cubic splines (\code{mkspline, cubic},
+\code{makespline rcs}); the defaults differ only in knot placement
+(Stata puts the outer knots at percentiles, \code{ns()} at the range).
+The basis computed on
+the estimation data is stored in the model and reused for every
+prediction and derivative.
+}
+
 \examples{
-\dontrun{
-# Single-level natural spline with automatic df selection
-fit <- nl_fit(data = mydata, y = "score", x = "age", df = "auto")
+# Single-level natural spline
+fit1 <- nl_fit(mtcars, y = "mpg", x = "hp", df = 3)
+fit1
 
-# Two-way cross-classified clustering
-fit2 <- nl_fit(
-  data    = mydata,
-  y       = "score",
-  x       = "age",
-  cluster = c("student_id", "school_id"),
-  nested  = FALSE
-)
+# Repeated measures: days nested in subjects
+fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+              cluster = "Subject", df = 3)
 
-# Nested clustering (students within schools)
-fit3 <- nl_fit(
-  data    = mydata,
-  y       = "score",
-  x       = "age",
-  cluster = c("student_id", "school_id"),
-  nested  = TRUE
-)
-
-# Random spline slopes
-fit4 <- nl_fit(
-  data         = mydata,
-  y            = "score",
-  x            = "age",
-  cluster      = "id",
-  random_slope = TRUE
-)
-}
+# Any lme4 random-effects structure via `random`
+fit2 <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+               random = "(1 | Subject)", df = 3)
 
 }
 \seealso{
 \code{\link{nl_predict}}, \code{\link{nl_derivatives}},
-\code{\link{nl_compare}}, \code{\link{nl_r2}}, \code{\link{nl_knots}}
+  \code{\link{nl_compare}}, \code{\link{nl_r2}}, \code{\link{nl_knots}}
 }

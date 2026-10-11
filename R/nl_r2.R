@@ -17,6 +17,13 @@
 #' \eqn{\sigma^2_f} is computed as the variance of the linear predictor
 #' from fixed effects only (\eqn{\hat{\mu} = X\hat{\beta}}).
 #'
+#' With random slopes, each random-effects term contributes the variance of
+#' its contribution to the linear predictor averaged over the estimation
+#' sample, \eqn{\overline{z_i^\top \Sigma z_i}} (Johnson 2014). For GLMMs
+#' the distribution-specific variance is \eqn{\pi^2/3} (logit), 1 (probit),
+#' \eqn{\pi^2/6} (complementary log-log), or the lognormal approximation
+#' for Poisson models (Nakagawa et al. 2017).
+#'
 #' The level-specific variance partition (r2_mlm-style) decomposes the total
 #' modelled variance (\eqn{\sigma^2_f + \sum \sigma^2_j + \sigma^2_\epsilon})
 #' to show how much each source contributes, printed as a breakdown table.
@@ -43,11 +50,19 @@
 #' generalized linear mixed-effects models revisited and expanded.
 #' Journal of the Royal Society Interface, 14(134), 20170213.
 #'
+#' Johnson, P. C. D. (2014). Extension of Nakagawa & Schielzeth's R2GLMM to
+#' random slopes models. Methods in Ecology and Evolution, 5(9), 944--946.
+#'
 #' Rights, J. D., & Sterba, S. K. (2019). Quantifying explained variance in
 #' multilevel models: An integrative framework for defining R-squared measures.
 #' Psychological Methods, 24(3), 309--338.
 #'
 #' @seealso \code{\link{nl_fit}}, \code{\link{nl_icc}}
+#'
+#' @examples
+#' fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+#'               cluster = "Subject", df = 3)
+#' nl_r2(fit)
 #'
 #' @export
 nl_r2 <- function(object, digits = 4L) {
@@ -86,145 +101,35 @@ nl_r2 <- function(object, digits = 4L) {
   }
 
   # ===========================================================================
-  # LMM (lmerMod)
+  # Mixed models (lmerMod / glmerMod)
   # ===========================================================================
-  if (inherits(mod, "lmerMod")) {
-
-    vc   <- lme4::VarCorr(mod)
-    vcdf <- as.data.frame(vc)
-
-    # Random-intercept variances per grouping factor
-    re_rows <- vcdf[
-      which(!is.na(vcdf$grp) &
-            vcdf$var1 == "(Intercept)" &
-            is.na(vcdf$var2) &
-            !is.na(vcdf$vcov)), , drop = FALSE
-    ]
-
-    if (!nrow(re_rows))
-      stop(
-        "No random intercept variances found. Is this truly a multilevel model?",
-        call. = FALSE
-      )
-
-    re_var   <- stats::setNames(as.numeric(re_rows$vcov),
-                                as.character(re_rows$grp))
-    # Defensive: drop any entries where name or value is NA
-    re_var   <- re_var[!is.na(names(re_var)) & !is.na(re_var)]
-    sigma_e2 <- as.numeric(attr(vc, "sc"))^2   # residual variance, unname
-
-    # Fixed-effects variance: var(X * beta)
-    ff_nobars <- tryCatch(
-      if (requireNamespace("reformulas", quietly = TRUE))
-        reformulas::nobars(stats::formula(mod))
-      else
-        lme4::nobars(stats::formula(mod)),
-      error = function(e) NULL
-    )
-
-    sigma_f2 <- if (!is.null(ff_nobars)) {
-      mf <- stats::model.frame(mod)
-      tt <- stats::delete.response(stats::terms(ff_nobars))
-      X  <- tryCatch(stats::model.matrix(tt, mf), error = function(e) NULL)
-      if (!is.null(X)) {
-        beta   <- lme4::fixef(mod)
-        common <- intersect(colnames(X), names(beta))
-        Xb     <- X[, common, drop = FALSE] %*% beta[common]
-        stats::var(as.numeric(Xb))
-      } else NA_real_
-    } else NA_real_
-
-    total_re  <- sum(re_var, na.rm = TRUE)
-    total_var <- sigma_f2 + total_re + sigma_e2
-
-    R2m <- sigma_f2 / total_var
-    R2c <- (sigma_f2 + total_re) / total_var
-    r2  <- c(R2m = R2m, R2c = R2c)
-
-    # Variance partition (r2_mlm style)
-    parts <- c(re_var, Residual = sigma_e2)
-    vp_df <- data.frame(
-      component  = c("Fixed effects", names(parts)),
-      variance   = c(sigma_f2, as.numeric(parts)),
-      proportion = c(sigma_f2, as.numeric(parts)) / total_var,
-      stringsAsFactors = FALSE
-    )
-
-    out <- structure(
-      list(type = "LMM", r2 = r2, variance_partition = vp_df),
-      class = "nl_r2"
-    )
-    print(out, digits = digits)
-    return(invisible(out))
-  }
-
-  # ===========================================================================
-  # GLMM (glmerMod)
-  # ===========================================================================
-  if (inherits(mod, "glmerMod")) {
-
-    fam  <- stats::family(mod)
-    vc   <- lme4::VarCorr(mod)
-    vcdf <- as.data.frame(vc)
-
-    re_rows <- vcdf[
-      which(!is.na(vcdf$grp) &
-            vcdf$var1 == "(Intercept)" &
-            is.na(vcdf$var2) &
-            !is.na(vcdf$vcov)), , drop = FALSE
-    ]
-
-    re_var   <- stats::setNames(as.numeric(re_rows$vcov),
-                                as.character(re_rows$grp))
-    re_var   <- re_var[!is.na(names(re_var)) & !is.na(re_var)]
-    total_re <- sum(re_var, na.rm = TRUE)
-
-    # Fixed-effects variance
-    ff_nobars <- tryCatch(
-      if (requireNamespace("reformulas", quietly = TRUE))
-        reformulas::nobars(stats::formula(mod))
-      else
-        lme4::nobars(stats::formula(mod)),
-      error = function(e) NULL
-    )
-
-    sigma_f2 <- if (!is.null(ff_nobars)) {
-      mf <- stats::model.frame(mod)
-      tt <- stats::delete.response(stats::terms(ff_nobars))
-      X  <- tryCatch(stats::model.matrix(tt, mf), error = function(e) NULL)
-      if (!is.null(X)) {
-        beta   <- lme4::fixef(mod)
-        common <- intersect(colnames(X), names(beta))
-        Xb     <- X[, common, drop = FALSE] %*% beta[common]
-        stats::var(as.numeric(Xb))
-      } else NA_real_
-    } else NA_real_
-
-    # Distribution-specific variance (link-scale approximation)
-    sigma_d2 <- switch(fam$family,
-      binomial = if (fam$link == "logit") (pi^2) / 3 else 1,
-      poisson  = {
-        mu <- stats::fitted(mod)
-        log(1 + 1 / mean(mu, na.rm = TRUE))
-      },
-      NA_real_
-    )
+  if (inherits(mod, "merMod")) {
+    re_var   <- .re_components(mod)
+    total_re <- sum(re_var)
+    sigma_f2 <- .fixed_var(mod)
+    sigma_d2 <- .dist_var(mod)
+    if (!is.finite(sigma_d2))
+      stop("R-squared is not implemented for this family/link.", call. = FALSE)
+    if (any(attr(re_var, "slopes")))
+      message("Random slopes present: their variance is averaged over the ",
+              "observed data (Johnson 2014).")
 
     total_var <- sigma_f2 + total_re + sigma_d2
-    R2m <- sigma_f2 / total_var
-    R2c <- (sigma_f2 + total_re) / total_var
-    r2  <- c(R2m = R2m, R2c = R2c)
+    r2 <- c(R2m = sigma_f2 / total_var,
+            R2c = (sigma_f2 + total_re) / total_var)
 
-    parts <- c(re_var, Distribution = sigma_d2)
+    lmm   <- inherits(mod, "lmerMod")
+    parts <- c(re_var, sigma_d2)
+    names(parts)[length(parts)] <- if (lmm) "Residual" else "Distribution"
     vp_df <- data.frame(
       component  = c("Fixed effects", names(parts)),
       variance   = c(sigma_f2, as.numeric(parts)),
       proportion = c(sigma_f2, as.numeric(parts)) / total_var,
       stringsAsFactors = FALSE
     )
-
     out <- structure(
-      list(type = "GLMM", r2 = r2, variance_partition = vp_df),
+      list(type = if (lmm) "LMM" else "GLMM", r2 = r2,
+           variance_partition = vp_df),
       class = "nl_r2"
     )
     print(out, digits = digits)

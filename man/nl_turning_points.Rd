@@ -4,12 +4,18 @@
 \alias{nl_turning_points}
 \title{Identify turning points and inflection regions}
 \usage{
-nl_turning_points(deriv_df, x, time = NULL, tol = 1e-06)
+nl_turning_points(
+  deriv_df,
+  x = attr(deriv_df, "x"),
+  time = attr(deriv_df, "time"),
+  tol = 1e-06
+)
 }
 \arguments{
 \item{deriv_df}{A data frame returned by \code{\link{nl_derivatives}}.}
 
-\item{x}{Character; name of the focal predictor column.}
+\item{x}{Character; name of the focal predictor column. Taken from the
+\code{nl_derivatives()} output by default.}
 
 \item{time}{Optional character; name of the time column. Turning points
 are identified separately within each time level when supplied.}
@@ -19,14 +25,14 @@ are identified separately within each time level when supplied.}
 }
 \value{
 A named list with three elements.
-\code{turning_points} is a data frame with columns \code{x},
-\code{time} (if applicable), \code{fit}, and \code{type}
-(one of \code{"maximum"}, \code{"minimum"}, or \code{"saddle"}).
-\code{inflection_regions} is a data frame with columns
-\code{x_start}, \code{x_end}, \code{time}, and \code{direction}
-(\code{"concave_to_convex"} or \code{"convex_to_concave"}).
-\code{slope_regions} is a data frame with columns \code{x_start},
-\code{x_end}, \code{direction}, and \code{time}.
+  \code{turning_points} is a data frame with columns \code{x},
+  \code{time} (if applicable), \code{fit}, and \code{type}
+  (one of \code{"maximum"}, \code{"minimum"}, or \code{"saddle"}).
+  \code{inflection_regions} is a data frame with columns
+  \code{x_start}, \code{x_end}, \code{time}, and \code{direction}
+  (\code{"concave_to_convex"} or \code{"convex_to_concave"}).
+  \code{slope_regions} is a data frame with columns \code{x_start},
+  \code{x_end}, \code{direction}, and \code{time}.
 }
 \description{
 From the derivative table returned by \code{\link{nl_derivatives}}, finds
@@ -34,6 +40,12 @@ turning points (values of \code{x} where the first derivative crosses zero),
 inflection regions (intervals where the second derivative changes sign),
 and slope regions (contiguous stretches where the curve is increasing,
 decreasing, or flat).
+}
+\examples{
+fit <- nl_fit(mtcars, y = "mpg", x = "hp", df = 3)
+tp <- nl_turning_points(nl_derivatives(fit))
+tp$slope_regions
+
 }
 \seealso{
 \code{\link{nl_derivatives}}, \code{\link{nl_plot}}

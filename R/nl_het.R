@@ -10,11 +10,13 @@
 #'   \item Refits the model with random spline slopes (if not already fitted
 #'     with \code{random_slope = TRUE}).
 #'   \item Extracts cluster-specific predicted curves (BLUPs).
-#'   \item Returns a heterogeneity summary: variance of slopes across clusters
-#'     at each x value, and a plot of the cluster-specific trajectories.
+#'   \item Returns the standard deviation of the cluster-specific curves at
+#'     each x value, and a plot of the cluster-specific trajectories.
 #'   \item Performs a likelihood-ratio test comparing the random-slope model
 #'     against a random-intercept-only model to assess whether heterogeneity
-#'     is statistically significant.
+#'     is statistically significant. Because the null hypothesis puts
+#'     variances on the boundary of the parameter space, the reported p-value
+#'     is conservative.
 #' }
 #'
 #' @param object An \code{nl_fit} object fitted with a single \code{cluster}
@@ -33,14 +35,24 @@
 #'   \describe{
 #'     \item{\code{trajectory_df}}{Long data frame of cluster-specific
 #'       predicted values.}
-#'     \item{\code{slope_variance}}{Named numeric: SD of first-derivative
-#'       estimates across clusters at each x value.}
+#'     \item{\code{between_cluster_sd}}{Data frame: the standard deviation
+#'       of the cluster-specific predicted values (response scale) across
+#'       the displayed clusters at each x value. Replaces the mislabelled
+#'       \code{slope_variance} of version 0.2.0.}
 #'     \item{\code{lrt}}{LRT comparing random-slope vs random-intercept model
 #'       (\code{NULL} if \code{random_slope = TRUE} was supplied).}
 #'     \item{\code{plot}}{A \code{ggplot} object.}
 #'   }
 #'
 #' @seealso \code{\link{nl_fit}}, \code{\link{nl_derivatives}}
+#'
+#' @examples
+#' \donttest{
+#' fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+#'               cluster = "Subject", df = 3)
+#' het <- nl_het(fit, plot = FALSE)
+#' het$lrt
+#' }
 #'
 #' @export
 nl_het <- function(
@@ -60,30 +72,12 @@ nl_het <- function(
   cluster_var <- object$cluster[1L]
   mod_ri      <- object$model   # random-intercept model (or the supplied one)
 
-  # Retrieve original data from the model frame
-  mf    <- tryCatch(stats::model.frame(mod_ri), error = function(e) NULL)
-  if (is.null(mf))
-    stop("Cannot extract model frame.", call. = FALSE)
-
-  # Attempt to recover full data (with cluster column)
-  orig_data <- tryCatch(
+  fit_data <- object$data %||% tryCatch(
     eval(object$call$data, envir = parent.frame()),
-    error = function(e) NULL
-  )
-  fit_data <- if (!is.null(orig_data) && cluster_var %in% names(orig_data)) {
-    orig_data
-  } else {
-    # Try attaching cluster from model object
-    tryCatch({
-      re_df  <- as.data.frame(lme4::ranef(mod_ri))
-      cl_ids <- rownames(lme4::ranef(mod_ri)[[cluster_var]])
-      stop("Cannot recover original data with cluster column. ",
-           "Please pass the data via `nl_fit(data = ...)` using a named object.",
-           call. = FALSE)
-    }, error = function(e) NULL)
-  }
-  if (is.null(fit_data))
-    stop("Cannot recover original data.", call. = FALSE)
+    error = function(e) NULL)
+  if (is.null(fit_data) || !cluster_var %in% names(fit_data))
+    stop("Original data not available; refit with MultiSpline >= 0.3.0.",
+         call. = FALSE)
 
   # ---  Refit with random slopes if needed  ---
   lrt <- NULL
@@ -105,10 +99,10 @@ nl_het <- function(
       }
     )
     if (!is.null(mod_rs)) {
-      lrt <- tryCatch(
-        stats::anova(mod_ri, mod_rs),
-        error = function(e) NULL
-      )
+      lrt <- tryCatch(.ml_lrt(mod_ri, mod_rs), error = function(e) {
+        message("LRT could not be computed: ", conditionMessage(e))
+        NULL
+      })
       mod_rs_use <- mod_rs
     } else {
       mod_rs_use <- mod_ri
@@ -136,7 +130,7 @@ nl_het <- function(
 
   # ---  Cluster-specific predictions  ---
   x_var    <- object$x
-  controls <- object$controls
+  controls <- object$control_vars %||% object$controls
 
   # Build newdata for each cluster
   traj_list <- lapply(plot_ids, function(id) {
@@ -154,7 +148,8 @@ nl_het <- function(
 
     nd$fit <- tryCatch(
       as.numeric(stats::predict(mod_rs_use, newdata = nd, re.form = NULL,
-                                allow.new.levels = TRUE)),
+                                allow.new.levels = TRUE,
+                                type = "response")),
       error = function(e) rep(NA_real_, nrow(nd))
     )
     nd$cluster_id <- id
@@ -166,8 +161,11 @@ nl_het <- function(
   pop_pred <- nl_predict(object, x_seq = x_seq, se = TRUE, level = level,
                          re_form = NA)
 
-  # Slope variance across clusters
-  slope_sd <- tapply(traj_df$fit, traj_df[[x_var]], stats::sd, na.rm = TRUE)
+  # Spread of the cluster-specific curves at each x
+  between_sd <- tapply(traj_df$fit, traj_df[[x_var]], stats::sd, na.rm = TRUE)
+  between_sd <- data.frame(x = as.numeric(names(between_sd)),
+                           sd = as.numeric(between_sd))
+  names(between_sd)[1L] <- x_var
 
   # ---  Plot  ---
   p <- ggplot2::ggplot() +
@@ -217,13 +215,14 @@ nl_het <- function(
   if (plot) print(p)
 
   if (!is.null(lrt)) {
-    cat("\n--- LRT: Random slopes vs Random intercepts ---\n")
-    print(lrt)
+    cat("\n--- LRT (ML): random spline slopes vs random intercepts ---\n")
+    print(lrt, row.names = FALSE)
+    cat("p-value is conservative: variances are tested on the boundary.\n")
   }
 
   invisible(list(
     trajectory_df  = traj_df,
-    slope_variance = slope_sd,
+    between_cluster_sd = between_sd,
     lrt            = lrt,
     plot           = p
   ))

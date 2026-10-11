@@ -2,7 +2,7 @@ Package: MultiSpline
 Type: Package
 Title: Spline-Based Nonlinear Modeling for Multilevel and Longitudinal
         Data
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: person(given = "Subir",
                   family = "Hait",
                   email = "haitsubi@msu.edu",
@@ -14,25 +14,31 @@ Description: Provides a unified framework for fitting, predicting, and
     using natural cubic splines ('splines'), B-splines ('splines'), and GAM
     smooths ('mgcv'). Supports two-way and nested clustering via 'lme4',
     automatic knot selection by AIC or BIC, multilevel R-squared
-    decomposition (Nakagawa-Schielzeth marginal and conditional R-squared
-    with level-specific variance partitioning), a postestimation suite
+    decomposition (marginal and conditional R-squared of Nakagawa and
+    Schielzeth (2013) <doi:10.1111/j.2041-210x.2012.00261.x>, extended to
+    random slopes as in Johnson (2014) <doi:10.1111/2041-210X.12225>, with
+    level-specific variance partitioning), a postestimation suite
     returning first and second derivatives with confidence bands, turning
     points and inflection regions, and a model comparison workflow
     contrasting linear, polynomial, and spline fits by AIC, BIC, and
     likelihood-ratio tests. Cluster heterogeneity in nonlinear effects is
-    supported via random-slope spline terms.
+    supported via random-slope spline terms. Any 'lme4' random-effects
+    structure can be supplied, and population-averaged (marginal) curves
+    are available for generalized linear mixed models.
 Depends: R (>= 4.2.0)
 Imports: stats, lme4, mgcv, dplyr, ggplot2, rlang, splines
-Suggests: lmerTest, knitr, rmarkdown, reformulas, numDeriv
+Suggests: lmerTest, knitr, rmarkdown, reformulas, numDeriv, patchwork,
+        testthat (>= 3.0.0)
+Config/testthat/edition: 3
 License: GPL-3
 Encoding: UTF-8
 Language: en-US
-URL: https://github.com/causalfragility-lab/MultiSpline
-BugReports: https://github.com/causalfragility-lab/MultiSpline/issues
-RoxygenNote: 7.3.3
+URL: https://github.com/subirhait/MultiSpline
+BugReports: https://github.com/subirhait/MultiSpline/issues
 NeedsCompilation: no
-Packaged: 2026-04-16 03:52:32 UTC; Subir
+Packaged: 2026-10-11 00:38:59 UTC; subir
 Author: Subir Hait [aut, cre] (ORCID: <https://orcid.org/0009-0004-9871-9677>)
 Maintainer: Subir Hait <haitsubi@msu.edu>
+Config/roxygen2/version: 8.0.0
 Repository: CRAN
-Date/Publication: 2026-04-16 07:02:39 UTC
+Date/Publication: 2026-10-11 02:30:02 UTC

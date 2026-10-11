@@ -23,6 +23,11 @@
 #'
 #' @seealso \code{\link{nl_fit}}, \code{\link{summary.nl_fit}}
 #'
+#' @examples
+#' fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+#'               cluster = "Subject", df = 3)
+#' nl_summary(fit)
+#'
 #' @export
 nl_summary <- function(
     object,

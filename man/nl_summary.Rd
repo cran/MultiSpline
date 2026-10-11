@@ -36,6 +36,12 @@ p-values and denominator degrees of freedom are obtained via
 \pkg{lmerTest} (Satterthwaite method). For GLMMs (\code{glmerMod}),
 z-tests are reported from \code{summary()}.
 }
+\examples{
+fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+              cluster = "Subject", df = 3)
+nl_summary(fit)
+
+}
 \seealso{
 \code{\link{nl_fit}}, \code{\link{summary.nl_fit}}
 }

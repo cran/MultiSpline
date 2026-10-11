@@ -31,9 +31,14 @@ print.nl_fit <- function(x, ...) {
   }
 
   if (is.null(x$cluster) || length(x$cluster) == 0L) {
-    cat("Cluster:  (none; single-level)\n")
+    cat("Levels:   (none; single-level)\n")
   } else {
-    cat("Cluster: ", paste(x$cluster, collapse = " > "), "\n", sep = "")
+    re <- x$random %||% tryCatch(
+      paste(vapply(.findbars(stats::formula(x$model)),
+                   function(b) paste0("(", deparse(b), ")"), character(1)),
+            collapse = " + "), error = function(e) NULL)
+    cat("Levels:  ", paste(x$cluster, collapse = ", "), "\n", sep = "")
+    if (!is.null(re)) cat("Random:  ", re, "\n", sep = "")
   }
 
   if (!is.null(x$family) && !is.null(x$family$family)) {
@@ -58,12 +63,13 @@ print.nl_fit <- function(x, ...) {
     cat("(formula unavailable)\n")
   }
 
-  cat("\nNext steps (v2):\n")
-  cat("  nl_summary(fit)               # tidy coefficient table\n")
-  cat("  nl_predict(fit)               # prediction grid with CI\n")
-  cat("  nl_plot(pred_df, x = ...)     # trajectory / slope / curvature\n")
-  cat("  nl_derivatives(pred_df, x)   # d1 / d2 with confidence bands\n")
-  cat("  nl_turning_points(deriv_df)   # maxima, minima, inflection regions\n")
+  cat("\nNext steps:\n")
+  cat("  nl_summary(fit)               # coefficient table\n")
+  cat("  nl_wald(fit)                  # joint test of the x terms\n")
+  cat("  nl_predict(fit)               # fitted curve with CI\n")
+  cat("  nl_derivatives(fit)           # slope / curvature with CI\n")
+  cat("  nl_plot(pred, deriv)          # trajectory / slope / curvature plots\n")
+  cat("  nl_turning_points(deriv)      # maxima, minima, inflection regions\n")
   cat("  nl_compare(fit)               # spline vs linear vs polynomial\n")
   cat("  nl_r2(fit)                    # R2 / multilevel variance decomposition\n")
   cat("  nl_knots(data, ...)           # explore df / knot selection\n")

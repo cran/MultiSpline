@@ -2,38 +2,69 @@
 % Please edit documentation in R/nl_derivatives.R
 \name{nl_derivatives}
 \alias{nl_derivatives}
-\title{Compute first and second derivatives of the fitted spline curve}
+\title{First and second derivatives of the fitted curve}
 \usage{
-nl_derivatives(pred_df, x, time = NULL, h = NULL, level = 0.95)
+nl_derivatives(
+  object,
+  x_seq = NULL,
+  time_levels = NULL,
+  controls_fixed = NULL,
+  level = 0.95,
+  type = c("conditional", "marginal"),
+  scale = c("response", "link"),
+  h = NULL,
+  ...
+)
 }
 \arguments{
-\item{pred_df}{A data frame returned by \code{\link{nl_predict}}.}
+\item{object}{An \code{nl_fit} object. (Passing a data frame from
+\code{nl_predict()}, as in version 0.2.0, still returns derivative
+estimates but no intervals, with a warning.)}
 
-\item{x}{Character; name of the focal predictor column.}
+\item{x_seq, time_levels, controls_fixed}{Grid specification, as in
+\code{\link{nl_predict}}.}
 
-\item{time}{Optional character; name of the time column. If present,
-derivatives are computed separately within each time level.}
+\item{level}{Confidence level. Default \code{0.95}.}
 
-\item{h}{Numeric; step size for finite-difference approximation.
-Default \code{NULL} uses 0.1 percent of the x range.}
+\item{type, scale}{As in \code{\link{nl_predict}}: derivatives of the
+conditional or marginal curve, on the response or link scale.}
 
-\item{level}{Confidence level for derivative CIs. Default \code{0.95}.}
+\item{h}{Step for the central differences. Default \code{NULL} uses
+\eqn{10^{-4}} times the range of \code{x}. Because the basis is
+evaluated exactly, the result is insensitive to \code{h}.}
+
+\item{...}{Ignored; absorbs arguments of the 0.2.0 interface.}
 }
 \value{
-A data frame with columns \code{x} (the focal predictor),
-\code{time} (if applicable), \code{fit} (predicted outcome),
-\code{d1} (first derivative), \code{d1_lwr} and \code{d1_upr}
-(lower and upper CI for the first derivative), \code{d2} (second
-derivative), and \code{d2_lwr} and \code{d2_upr} (CI for the second
-derivative).
+A data frame with the grid columns, \code{fit}, \code{d1},
+  \code{d1_se}, \code{d1_lwr}, \code{d1_upr}, \code{d2}, \code{d2_se},
+  \code{d2_lwr}, and \code{d2_upr}.
 }
 \description{
-Uses numerical differentiation on the prediction grid to compute the
-first derivative (slope / marginal effect), the second derivative
-(curvature), and propagated confidence bands for both, using the
-delta method from the \code{se.fit} column of \code{nl_predict()}.
-Results are passed to \code{\link{nl_turning_points}} to identify
-local turning points and inflection regions.
+Computes the slope (first derivative) and curvature (second derivative) of
+the fitted curve with respect to \code{x}, with delta-method standard
+errors and pointwise confidence intervals.
+}
+\details{
+Derivatives are taken of the model itself, not of a table of predictions.
+For each grid value the spline basis is evaluated at \eqn{x \pm h} with
+the knots of the fitted model, giving the derivative as a linear
+combination \eqn{d^\top\beta} (identity link) or, for other links, via
+the chain rule. Its variance is \eqn{g^\top V g}, where \eqn{g} is the
+gradient with respect to the fixed effects and \eqn{V} their covariance
+matrix. This accounts for the strong correlation between neighbouring
+points on the curve, which a calculation from a prediction table
+cannot do.
+
+Intervals are pointwise, not simultaneous: they describe uncertainty at
+each \code{x} separately.
+}
+\examples{
+fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+              cluster = "Subject", df = 3)
+deriv <- nl_derivatives(fit, x_seq = 0:9)
+deriv[, c("Days", "d1", "d1_lwr", "d1_upr")]
+
 }
 \seealso{
 \code{\link{nl_turning_points}}, \code{\link{nl_plot}}

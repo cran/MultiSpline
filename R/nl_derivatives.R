@@ -1,166 +1,135 @@
-#' Compute first and second derivatives of the fitted spline curve
+#' First and second derivatives of the fitted curve
 #'
 #' @description
-#' Uses numerical differentiation on the prediction grid to compute the
-#' first derivative (slope / marginal effect), the second derivative
-#' (curvature), and propagated confidence bands for both, using the
-#' delta method from the \code{se.fit} column of \code{nl_predict()}.
-#' Results are passed to \code{\link{nl_turning_points}} to identify
-#' local turning points and inflection regions.
+#' Computes the slope (first derivative) and curvature (second derivative) of
+#' the fitted curve with respect to \code{x}, with delta-method standard
+#' errors and pointwise confidence intervals.
 #'
-#' @param pred_df A data frame returned by \code{\link{nl_predict}}.
-#' @param x Character; name of the focal predictor column.
-#' @param time Optional character; name of the time column. If present,
-#'   derivatives are computed separately within each time level.
-#' @param h Numeric; step size for finite-difference approximation.
-#'   Default \code{NULL} uses 0.1 percent of the x range.
-#' @param level Confidence level for derivative CIs. Default \code{0.95}.
+#' @details
+#' Derivatives are taken of the model itself, not of a table of predictions.
+#' For each grid value the spline basis is evaluated at \eqn{x \pm h} with
+#' the knots of the fitted model, giving the derivative as a linear
+#' combination \eqn{d^\top\beta} (identity link) or, for other links, via
+#' the chain rule. Its variance is \eqn{g^\top V g}, where \eqn{g} is the
+#' gradient with respect to the fixed effects and \eqn{V} their covariance
+#' matrix. This accounts for the strong correlation between neighbouring
+#' points on the curve, which a calculation from a prediction table
+#' cannot do.
 #'
-#' @return A data frame with columns \code{x} (the focal predictor),
-#'   \code{time} (if applicable), \code{fit} (predicted outcome),
-#'   \code{d1} (first derivative), \code{d1_lwr} and \code{d1_upr}
-#'   (lower and upper CI for the first derivative), \code{d2} (second
-#'   derivative), and \code{d2_lwr} and \code{d2_upr} (CI for the second
-#'   derivative).
+#' Intervals are pointwise, not simultaneous: they describe uncertainty at
+#' each \code{x} separately.
+#'
+#' @param object An \code{nl_fit} object. (Passing a data frame from
+#'   \code{nl_predict()}, as in version 0.2.0, still returns derivative
+#'   estimates but no intervals, with a warning.)
+#' @param x_seq,time_levels,controls_fixed Grid specification, as in
+#'   \code{\link{nl_predict}}.
+#' @param level Confidence level. Default \code{0.95}.
+#' @param type,scale As in \code{\link{nl_predict}}: derivatives of the
+#'   conditional or marginal curve, on the response or link scale.
+#' @param h Step for the central differences. Default \code{NULL} uses
+#'   \eqn{10^{-4}} times the range of \code{x}. Because the basis is
+#'   evaluated exactly, the result is insensitive to \code{h}.
+#' @param ... Ignored; absorbs arguments of the 0.2.0 interface.
+#'
+#' @return A data frame with the grid columns, \code{fit}, \code{d1},
+#'   \code{d1_se}, \code{d1_lwr}, \code{d1_upr}, \code{d2}, \code{d2_se},
+#'   \code{d2_lwr}, and \code{d2_upr}.
 #'
 #' @seealso \code{\link{nl_turning_points}}, \code{\link{nl_plot}}
 #'
+#' @examples
+#' fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+#'               cluster = "Subject", df = 3)
+#' deriv <- nl_derivatives(fit, x_seq = 0:9)
+#' deriv[, c("Days", "d1", "d1_lwr", "d1_upr")]
+#'
 #' @export
 nl_derivatives <- function(
-    pred_df,
-    x,
-    time  = NULL,
-    h     = NULL,
-    level = 0.95
+    object,
+    x_seq          = NULL,
+    time_levels    = NULL,
+    controls_fixed = NULL,
+    level          = 0.95,
+    type           = c("conditional", "marginal"),
+    scale          = c("response", "link"),
+    h              = NULL,
+    ...
 ) {
 
-  if (!is.data.frame(pred_df))
-    stop("`pred_df` must be a data frame from nl_predict().", call. = FALSE)
-  if (!x %in% names(pred_df))
-    stop("`x` ('", x, "') not found in `pred_df`.", call. = FALSE)
-  if (!"fit" %in% names(pred_df))
-    stop("`pred_df` must contain a 'fit' column.", call. = FALSE)
+  if (is.data.frame(object) && !inherits(object, "nl_fit"))
+    return(.derivatives_from_table(object, x_name = x_seq, ...))
 
-  has_se <- "se.fit" %in% names(pred_df) && any(!is.na(pred_df$se.fit))
-  crit   <- stats::qnorm(1 - (1 - level) / 2)
+  if (!inherits(object, "nl_fit"))
+    stop("`object` must be an 'nl_fit' object.", call. = FALSE)
+  type  <- match.arg(type)
+  scale <- match.arg(scale)
+  if (object$method == "gam" && type == "marginal")
+    type <- "conditional"
 
-  # Auto-detect time column
-  if (is.null(time)) {
-    candidates <- c("TimePoint", "time", "Time", "wave", "Wave",
-                    "occasion", "Occasion")
-    hit <- candidates[candidates %in% names(pred_df)]
-    if (length(hit)) time <- hit[1L]
-  }
+  nd   <- .prediction_grid(object, x_seq, time_levels, controls_fixed)
+  x    <- object$x
+  crit <- stats::qnorm(1 - (1 - level) / 2)
+  if (is.null(h)) h <- 1e-4 * (object$x_info$max - object$x_info$min)
+  if (!is.finite(h) || h <= 0) h <- 1e-4
 
-  .deriv_group <- function(df_sub) {
-    xv  <- df_sub[[x]]
-    yv  <- df_sub[["fit"]]
-    sev <- if (has_se) df_sub[["se.fit"]] else rep(0, nrow(df_sub))
-    n   <- length(xv)
+  nd_p <- nd; nd_p[[x]] <- nd_p[[x]] + h
+  nd_m <- nd; nd_m[[x]] <- nd_m[[x]] - h
 
-    # Ensure sorted by x
-    ord <- order(xv)
-    xv  <- xv[ord]; yv <- yv[ord]; sev <- sev[ord]
+  ev <- function(d) suppressWarnings(.mean_and_grad(object, d, type, scale))
+  f0 <- ev(nd); fp <- ev(nd_p); fm <- ev(nd_m)
+  V  <- f0$V
 
-    if (is.null(h)) h <- diff(range(xv, na.rm = TRUE)) * 0.001
-    if (!is.finite(h) || h <= 0) h <- 1e-4
+  d1   <- (fp$mu - fm$mu) / (2 * h)
+  g1   <- (fp$G  - fm$G)  / (2 * h)
+  d2   <- (fp$mu - 2 * f0$mu + fm$mu) / h^2
+  g2   <- (fp$G  - 2 * f0$G  + fm$G)  / h^2
+  se1  <- .qform(g1, V)
+  se2  <- .qform(g2, V)
 
-    # --- First derivative: central differences ---
-    d1 <- rep(NA_real_, n)
-
-    if (n >= 3L) {
-      for (i in seq(2L, n - 1L)) {
-        dx <- xv[i + 1L] - xv[i - 1L]
-        if (is.finite(dx) && dx > 0)
-          d1[i] <- (yv[i + 1L] - yv[i - 1L]) / dx
-      }
-      dx_f <- xv[2L] - xv[1L]
-      dx_b <- xv[n] - xv[n - 1L]
-      if (is.finite(dx_f) && dx_f > 0) d1[1L] <- (yv[2L] - yv[1L]) / dx_f
-      if (is.finite(dx_b) && dx_b > 0) d1[n]  <- (yv[n] - yv[n - 1L]) / dx_b
-    } else if (n == 2L) {
-      dx <- xv[2L] - xv[1L]
-      if (is.finite(dx) && dx > 0) d1[] <- (yv[2L] - yv[1L]) / dx
-    }
-
-    # --- Second derivative: finite difference of d1 ---
-    d2 <- rep(NA_real_, n)
-
-    if (n >= 3L) {
-      for (i in seq(2L, n - 1L)) {
-        dx <- xv[i + 1L] - xv[i - 1L]
-        if (is.finite(dx) && dx > 0)
-          d2[i] <- (d1[i + 1L] - d1[i - 1L]) / dx
-      }
-      dx_f <- xv[2L] - xv[1L]
-      dx_b <- xv[n] - xv[n - 1L]
-      if (is.finite(dx_f) && dx_f > 0)
-        d2[1L] <- (d1[2L] - d1[1L]) / dx_f
-      if (is.finite(dx_b) && dx_b > 0)
-        d2[n]  <- (d1[n] - d1[n - 1L]) / dx_b
-    }
-
-    # --- Delta-method SE for d1 ---
-    # Var(dy/dx) ~ (se_{i+1}^2 + se_{i-1}^2) / dx^2
-    d1_se <- rep(NA_real_, n)
-
-    if (has_se && n >= 3L) {
-      for (i in seq(2L, n - 1L)) {
-        dx <- xv[i + 1L] - xv[i - 1L]
-        if (is.finite(dx) && dx > 0)
-          d1_se[i] <- sqrt(sev[i + 1L]^2 + sev[i - 1L]^2) / abs(dx)
-      }
-      dx_f <- xv[2L] - xv[1L]
-      dx_b <- xv[n] - xv[n - 1L]
-      if (is.finite(dx_f) && dx_f > 0)
-        d1_se[1L] <- sqrt(sev[2L]^2 + sev[1L]^2) / abs(dx_f)
-      if (is.finite(dx_b) && dx_b > 0)
-        d1_se[n]  <- sqrt(sev[n]^2 + sev[n - 1L]^2) / abs(dx_b)
-    }
-
-    # --- Delta-method SE for d2 (propagated from d1_se) ---
-    d2_se <- rep(NA_real_, n)
-
-    if (has_se && n >= 3L) {
-      for (i in seq(2L, n - 1L)) {
-        dx <- xv[i + 1L] - xv[i - 1L]
-        if (is.finite(dx) && dx > 0 &&
-            is.finite(d1_se[i + 1L]) && is.finite(d1_se[i - 1L]))
-          d2_se[i] <- sqrt(d1_se[i + 1L]^2 + d1_se[i - 1L]^2) / abs(dx)
-      }
-    }
-
-    data.frame(
-      x_val  = xv,
-      fit    = yv,
-      d1     = d1,
-      d1_lwr = d1 - crit * d1_se,
-      d1_upr = d1 + crit * d1_se,
-      d2     = d2,
-      d2_lwr = d2 - crit * d2_se,
-      d2_upr = d2 + crit * d2_se,
-      stringsAsFactors = FALSE
-    )
-  }
-
-  # Run within each time group if applicable
-  if (!is.null(time) && time %in% names(pred_df)) {
-    groups <- split(pred_df, pred_df[[time]])
-    parts  <- lapply(names(groups), function(lv) {
-      res         <- .deriv_group(groups[[lv]])
-      res[[time]] <- lv
-      res
-    })
-    out <- do.call(rbind, parts)
-  } else {
-    out <- .deriv_group(pred_df)
-  }
-
-  # Rename x_val back to the original predictor name
-  names(out)[names(out) == "x_val"] <- x
-
-  if (requireNamespace("dplyr", quietly = TRUE)) out <- dplyr::as_tibble(out)
+  out        <- nd
+  out$fit    <- f0$mu
+  out$d1     <- d1
+  out$d1_se  <- se1
+  out$d1_lwr <- d1 - crit * se1
+  out$d1_upr <- d1 + crit * se1
+  out$d2     <- d2
+  out$d2_se  <- se2
+  out$d2_lwr <- d2 - crit * se2
+  out$d2_upr <- d2 + crit * se2
+  out <- dplyr::as_tibble(out)
+  attr(out, "type")  <- type
+  attr(out, "scale") <- scale
+  attr(out, "x")     <- object$x
+  attr(out, "time")  <- object$time
   out
+}
+
+
+# 0.2.0 interface: derivatives from a prediction table. Point estimates only.
+.derivatives_from_table <- function(pred_df, x_name = NULL, x = NULL,
+                                    time = NULL, ...) {
+  x <- x %||% x_name
+  if (!is.character(x) || !x %in% names(pred_df))
+    stop("Supply the nl_fit object: nl_derivatives(fit).", call. = FALSE)
+  warning("nl_derivatives() now takes the fitted model: nl_derivatives(fit). ",
+          "From a prediction table only point estimates can be computed; ",
+          "intervals are returned as NA because the correlation between ",
+          "neighbouring predictions is unknown.", call. = FALSE)
+  grp <- if (!is.null(time) && time %in% names(pred_df))
+    split(seq_len(nrow(pred_df)), pred_df[[time]]) else list(seq_len(nrow(pred_df)))
+  pieces <- lapply(grp, function(ix) {
+    d  <- pred_df[ix, , drop = FALSE]
+    d  <- d[order(d[[x]]), , drop = FALSE]
+    xv <- d[[x]]; yv <- d[["fit"]]
+    d1 <- c(NA, diff(yv, lag = 2) / diff(xv, lag = 2), NA)
+    d2 <- c(NA, diff(d1, lag = 2) / diff(xv, lag = 2), NA)
+    d$d1 <- d1; d$d2 <- d2
+    d$d1_se <- d$d1_lwr <- d$d1_upr <- NA_real_
+    d$d2_se <- d$d2_lwr <- d$d2_upr <- NA_real_
+    d
+  })
+  dplyr::as_tibble(do.call(rbind, pieces))
 }
 
 
@@ -174,7 +143,8 @@ nl_derivatives <- function(
 #' decreasing, or flat).
 #'
 #' @param deriv_df A data frame returned by \code{\link{nl_derivatives}}.
-#' @param x Character; name of the focal predictor column.
+#' @param x Character; name of the focal predictor column. Taken from the
+#'   \code{nl_derivatives()} output by default.
 #' @param time Optional character; name of the time column. Turning points
 #'   are identified separately within each time level when supplied.
 #' @param tol Numeric tolerance for near-zero detection of d1. Default
@@ -192,11 +162,16 @@ nl_derivatives <- function(
 #'
 #' @seealso \code{\link{nl_derivatives}}, \code{\link{nl_plot}}
 #'
+#' @examples
+#' fit <- nl_fit(mtcars, y = "mpg", x = "hp", df = 3)
+#' tp <- nl_turning_points(nl_derivatives(fit))
+#' tp$slope_regions
+#'
 #' @export
 nl_turning_points <- function(
     deriv_df,
-    x,
-    time = NULL,
+    x    = attr(deriv_df, "x"),
+    time = attr(deriv_df, "time"),
     tol  = 1e-6
 ) {
 

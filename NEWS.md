@@ -1,3 +1,52 @@
+# MultiSpline 0.3.0
+
+## Corrections (results from 0.2.0 may change)
+
+* `nl_predict()`: standard errors and intervals for `lmer`/`glmer` models were
+  computed from a spline basis rebuilt on the prediction grid instead of the
+  basis used in estimation. They are now computed with the estimation basis.
+  Point predictions were not affected.
+* `nl_derivatives()`: interval estimates treated neighbouring predictions as
+  independent, which made slope and curvature intervals far too wide (by a
+  factor of 10 to 100 in tests). Derivatives are now computed from the model
+  with the full covariance matrix. The function now takes the fitted model:
+  `nl_derivatives(fit)`. Passing a prediction table still returns point
+  estimates, with a warning and no intervals.
+* Automatic df selection (`df = "auto"`), `nl_knots()`, and `nl_compare()`
+  used REML likelihoods for Gaussian mixed models, which are not comparable
+  across different fixed effects. All comparisons now use maximum
+  likelihood. The final model is still fitted by REML unless `REML = FALSE`.
+* `nl_r2()` and `nl_icc()` ignored random-slope variances. They now include
+  them, averaged over the data (Johnson 2014); `nl_icc()` warns that the ICC
+  then depends on `x`.
+* `nl_fit(cluster = c("student", "school"), nested = TRUE)` built
+  `(1 | student/school)`, i.e. schools nested in students, contrary to the
+  documentation, and so omitted the school-level variance. It now builds
+  `(1 | school/student)`: the first variable is nested within the second.
+* `nl_r2()`: complementary log-log models now use pi^2/6 as the
+  distribution-specific variance.
+* `nl_het()`: cluster-specific curves for non-Gaussian models were on the
+  link scale while the population curve was on the response scale; both are
+  now on the response scale. The output `slope_variance` (which was the SD
+  of predicted values, not of slopes) is renamed `between_cluster_sd`.
+
+## New features
+
+* `nl_fit(random = )` accepts any `lme4` random-effects specification, e.g.
+  `"(1 | school/student)"` or `"(1 | idcode) + (1 | indcode)"`.
+* `nl_predict(type = "marginal")` gives population-averaged curves for
+  GLMMs; `scale = "link"` gives the linear predictor. The documentation now
+  states exactly what is predicted.
+* `controls` accepts expressions such as `"factor(race)"` or `"I(age^2)"`.
+* `nl_wald()`: joint Wald test that all coefficients involving `x` are zero.
+* `nl_fit()` warns when `x` has too few distinct values for the requested df.
+* The data used in estimation are stored in the fit, so `nl_compare()` and
+  `nl_het()` no longer need to find the original data frame.
+* `nl_plot(type = "combo")` returns one combined figure (via patchwork when
+  installed) instead of a list, so it can be saved with `ggsave()`.
+* `nl_plot()` and `nl_turning_points()` read the variable names from their
+  input, so `x` no longer has to be repeated.
+
 # MultiSpline 0.2.0
 
 ## Major new features

@@ -13,13 +13,13 @@ nl_r2(object, digits = 4L)
 }
 \value{
 A list of class \code{"nl_r2"} returned invisibly and
-pretty-printed automatically. It contains \code{type} (one of
-\code{"OLS"}, \code{"GAM"}, \code{"LMM"}, or \code{"GLMM"}),
-\code{r2} (a named numeric vector: \code{R2} and \code{R2_adj} for OLS;
-\code{R2_dev} for GAM; \code{R2m} and \code{R2c} for LMM/GLMM), and
-\code{variance_partition} (a data frame with columns \code{component},
-\code{variance}, and \code{proportion} for multilevel models, or
-\code{NULL} for single-level models).
+  pretty-printed automatically. It contains \code{type} (one of
+  \code{"OLS"}, \code{"GAM"}, \code{"LMM"}, or \code{"GLMM"}),
+  \code{r2} (a named numeric vector: \code{R2} and \code{R2_adj} for OLS;
+  \code{R2_dev} for GAM; \code{R2m} and \code{R2c} for LMM/GLMM), and
+  \code{variance_partition} (a data frame with columns \code{component},
+  \code{variance}, and \code{proportion} for multilevel models, or
+  \code{NULL} for single-level models).
 }
 \description{
 Computes a suite of R-squared statistics for models fitted by
@@ -38,9 +38,22 @@ Johnson and Schielzeth (2017). The fixed-effects variance
 \eqn{\sigma^2_f} is computed as the variance of the linear predictor
 from fixed effects only (\eqn{\hat{\mu} = X\hat{\beta}}).
 
+With random slopes, each random-effects term contributes the variance of
+its contribution to the linear predictor averaged over the estimation
+sample, \eqn{\overline{z_i^\top \Sigma z_i}} (Johnson 2014). For GLMMs
+the distribution-specific variance is \eqn{\pi^2/3} (logit), 1 (probit),
+\eqn{\pi^2/6} (complementary log-log), or the lognormal approximation
+for Poisson models (Nakagawa et al. 2017).
+
 The level-specific variance partition (r2_mlm-style) decomposes the total
 modelled variance (\eqn{\sigma^2_f + \sum \sigma^2_j + \sigma^2_\epsilon})
 to show how much each source contributes, printed as a breakdown table.
+}
+\examples{
+fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+              cluster = "Subject", df = 3)
+nl_r2(fit)
+
 }
 \references{
 Nakagawa, S., & Schielzeth, H. (2013). A general and simple method for
@@ -51,6 +64,9 @@ Nakagawa, S., Johnson, P. C. D., & Schielzeth, H. (2017). The coefficient
 of determination R-squared and intra-class correlation coefficient from
 generalized linear mixed-effects models revisited and expanded.
 Journal of the Royal Society Interface, 14(134), 20170213.
+
+Johnson, P. C. D. (2014). Extension of Nakagawa & Schielzeth's R2GLMM to
+random slopes models. Methods in Ecology and Evolution, 5(9), 944--946.
 
 Rights, J. D., & Sterba, S. K. (2019). Quantifying explained variance in
 multilevel models: An integrative framework for defining R-squared measures.

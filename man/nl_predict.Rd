@@ -11,6 +11,8 @@ nl_predict(
   controls_fixed = NULL,
   se = TRUE,
   level = 0.95,
+  type = c("conditional", "marginal"),
+  scale = c("response", "link"),
   re_form = NA,
   glmer_ci = c("delta", "boot"),
   n_boot = 500L,
@@ -20,50 +22,80 @@ nl_predict(
 \arguments{
 \item{object}{An \code{nl_fit} object.}
 
-\item{x_seq}{Optional numeric vector of x values. If \code{NULL}, 200
-evenly-spaced points between the 1st and 99th percentiles.}
+\item{x_seq}{Optional numeric vector of x values.}
 
 \item{time_levels}{Optional vector of time levels.}
 
 \item{controls_fixed}{Optional named list of fixed control values.}
 
-\item{se}{Logical; include SEs and CIs. Default \code{TRUE}.}
+\item{se}{Logical; include standard errors and intervals. Default
+\code{TRUE}.}
 
 \item{level}{Confidence level. Default \code{0.95}.}
 
-\item{re_form}{For mixed models: \code{NA} (population-level, default) or
-\code{NULL} (include random effects).}
+\item{type}{\code{"conditional"} (default) or \code{"marginal"}; see
+\emph{What is predicted}.}
 
-\item{glmer_ci}{Method for glmerMod CIs: \code{"delta"} (default) or
-\code{"boot"} (parametric bootstrap).}
+\item{scale}{\code{"response"} (default) or \code{"link"}.}
 
-\item{n_boot}{Number of bootstrap replicates when \code{glmer_ci = "boot"}.
-Default \code{500}.}
+\item{re_form}{Retained for compatibility. Only \code{NA} (random effects
+set to zero) is supported; use \code{\link{nl_het}} for
+cluster-specific curves.}
+
+\item{glmer_ci}{For non-Gaussian mixed models: \code{"delta"} (default)
+or \code{"boot"} (parametric bootstrap via \code{lme4::bootMer()}).}
+
+\item{n_boot}{Number of bootstrap replicates when \code{glmer_ci = "boot"}.}
 
 \item{...}{Reserved for future use.}
 }
 \value{
-A data frame with columns for the focal predictor, time (if any),
-controls at fixed values, \code{fit}, \code{se.fit}, \code{lwr},
-and \code{upr}.
+A data frame (tibble) with the grid columns, \code{fit},
+  \code{se.fit}, \code{lwr}, and \code{upr}. Attributes \code{type} and
+  \code{scale} record what was predicted.
 }
 \description{
-Creates a prediction data frame over a grid of the focal predictor \code{x}
-(and optionally over \code{time}), holding control variables at typical
-values. For mixed models, predictions default to population-level curves
-(random effects set to zero).
-
-v2 improvements:
-\itemize{
-\item \strong{CI for glmerMod}: approximate confidence intervals are
-computed via the parametric bootstrap or the delta method. Set
-\code{glmer_ci = "delta"} (default, fast) or \code{"boot"} (more
-accurate, slower).
-\item \strong{Cluster-specific predictions}: set \code{re_form = NULL}
-to include random effects in the predictions.
+Evaluates the fitted curve over a grid of the focal predictor \code{x}
+(and over \code{time} levels, if the model has a time interaction),
+holding control variables at fixed values.
 }
+\section{What is predicted}{
+
+\itemize{
+  \item The grid has 200 evenly spaced values of \code{x} between its 1st
+    and 99th sample percentiles unless \code{x_seq} is supplied. Each row
+    is an exact evaluation of the fitted model; nothing is interpolated.
+    Plots join these points with straight line segments.
+  \item Controls are held at their sample mean (numeric) or first level
+    (factor / character) unless set in \code{controls_fixed}.
+  \item \code{type = "conditional"} (default) sets all random effects to
+    zero: the curve for a cluster whose random effects are at their mean.
+    For Gaussian models this equals the population-averaged curve.
+  \item \code{type = "marginal"} averages the response-scale mean over
+    the estimated random-effect distribution (Gauss-Hermite quadrature).
+    For non-identity links (e.g. logistic models) this population-averaged
+    curve is flatter than the conditional curve. Available for random
+    intercepts and for the random spline slopes created by
+    \code{nl_fit(random_slope = TRUE)}.
+  \item \code{scale = "response"} (default) returns means on the outcome
+    scale (probabilities for binary outcomes); \code{scale = "link"}
+    returns the linear predictor.
+  \item Standard errors use the delta method with the full covariance
+    matrix of the fixed effects, treating variance components as known.
+    Intervals are formed on the link scale and transformed, so they stay
+    inside the range of the outcome.
+}
+}
+
+\examples{
+fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+              cluster = "Subject", df = 3)
+pred <- nl_predict(fit)
+head(pred)
+attr(pred, "type")
+
 }
 \seealso{
 \code{\link{nl_fit}}, \code{\link{nl_plot}},
-\code{\link{nl_derivatives}}
+  \code{\link{nl_derivatives}}
 }

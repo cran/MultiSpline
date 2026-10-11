@@ -33,15 +33,17 @@ Default \code{42L}.}
 }
 \value{
 A list (invisibly) with:
-\describe{
-\item{\code{trajectory_df}}{Long data frame of cluster-specific
-predicted values.}
-\item{\code{slope_variance}}{Named numeric: SD of first-derivative
-estimates across clusters at each x value.}
-\item{\code{lrt}}{LRT comparing random-slope vs random-intercept model
-(\code{NULL} if \code{random_slope = TRUE} was supplied).}
-\item{\code{plot}}{A \code{ggplot} object.}
-}
+  \describe{
+    \item{\code{trajectory_df}}{Long data frame of cluster-specific
+      predicted values.}
+    \item{\code{between_cluster_sd}}{Data frame: the standard deviation
+      of the cluster-specific predicted values (response scale) across
+      the displayed clusters at each x value. Replaces the mislabelled
+      \code{slope_variance} of version 0.2.0.}
+    \item{\code{lrt}}{LRT comparing random-slope vs random-intercept model
+      (\code{NULL} if \code{random_slope = TRUE} was supplied).}
+    \item{\code{plot}}{A \code{ggplot} object.}
+  }
 }
 \description{
 Quantifies and visualises how much the nonlinear relationship between
@@ -50,15 +52,26 @@ spline slopes.
 
 The function:
 \enumerate{
-\item Refits the model with random spline slopes (if not already fitted
-with \code{random_slope = TRUE}).
-\item Extracts cluster-specific predicted curves (BLUPs).
-\item Returns a heterogeneity summary: variance of slopes across clusters
-at each x value, and a plot of the cluster-specific trajectories.
-\item Performs a likelihood-ratio test comparing the random-slope model
-against a random-intercept-only model to assess whether heterogeneity
-is statistically significant.
+  \item Refits the model with random spline slopes (if not already fitted
+    with \code{random_slope = TRUE}).
+  \item Extracts cluster-specific predicted curves (BLUPs).
+  \item Returns the standard deviation of the cluster-specific curves at
+    each x value, and a plot of the cluster-specific trajectories.
+  \item Performs a likelihood-ratio test comparing the random-slope model
+    against a random-intercept-only model to assess whether heterogeneity
+    is statistically significant. Because the null hypothesis puts
+    variances on the boundary of the parameter space, the reported p-value
+    is conservative.
 }
+}
+\examples{
+\donttest{
+fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+              cluster = "Subject", df = 3)
+het <- nl_het(fit, plot = FALSE)
+het$lrt
+}
+
 }
 \seealso{
 \code{\link{nl_fit}}, \code{\link{nl_derivatives}}

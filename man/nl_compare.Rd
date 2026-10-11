@@ -25,13 +25,13 @@ comparison model objects. Default \code{FALSE}.}
 }
 \value{
 A list (invisibly) of class \code{"nl_compare"} with:
-\describe{
-\item{\code{table}}{A data frame with the comparison statistics.}
-\item{\code{models}}{Named list of fitted models (when
-\code{return_models = TRUE}).}
-\item{\code{best}}{Name of the model with the lowest AIC.}
-}
-The table is pretty-printed automatically.
+  \describe{
+    \item{\code{table}}{A data frame with the comparison statistics.}
+    \item{\code{models}}{Named list of fitted models (when
+      \code{return_models = TRUE}).}
+    \item{\code{best}}{Name of the model with the lowest AIC.}
+  }
+  The table is pretty-printed automatically.
 }
 \description{
 Compares a nonlinear spline model against simpler alternatives—a linear
@@ -40,19 +40,24 @@ spline approach over simpler specifications.
 
 For each model, the function reports:
 \itemize{
-\item AIC and BIC
-\item Log-likelihood (and likelihood-ratio test versus the linear model
-where available)
-\item Number of parameters (df)
-\item Residual variance / deviance
+  \item AIC and BIC
+  \item Log-likelihood (and likelihood-ratio test versus the linear model
+    where available)
+  \item Number of parameters (df)
+  \item Residual variance / deviance
 }
+
+Mixed models are compared on their maximum-likelihood fits: the spline
+model is refitted by ML if it was estimated by REML, and the comparison
+models are fitted by ML. REML likelihoods cannot be compared across
+models with different fixed effects. The comparison models use the same
+random-effects structure as the spline model (random intercepts only if
+the spline model has random spline slopes).
 }
 \examples{
-\dontrun{
-fit <- nl_fit(data = mydata, y = "score", x = "age", df = 4)
-nl_compare(fit)
-nl_compare(fit, polynomial_degrees = c(2, 3, 4))
-}
+fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+              cluster = "Subject", df = 3)
+nl_compare(fit, polynomial_degrees = 2)
 
 }
 \seealso{

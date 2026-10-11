@@ -7,7 +7,7 @@
 nl_plot(
   pred_df = NULL,
   deriv_df = NULL,
-  x,
+  x = NULL,
   time = NULL,
   type = c("trajectory", "slope", "curvature", "combo"),
   show_ci = TRUE,
@@ -28,8 +28,8 @@ nl_plot(
 \item{deriv_df}{A data frame from \code{\link{nl_derivatives}} (for
 \code{type = "slope"}, \code{"curvature"}, or \code{"combo"}).}
 
-\item{x}{Character; name of the focal predictor column in \code{pred_df} /
-\code{deriv_df}.}
+\item{x}{Character; name of the focal predictor column. Taken from the
+\code{nl_predict()} / \code{nl_derivatives()} output by default.}
 
 \item{time}{Optional character; name of the time column. Auto-detected if
 \code{NULL}.}
@@ -60,20 +60,30 @@ horizontal line at zero. Default \code{TRUE}.}
 \item{legend_title}{Optional legend title.}
 }
 \value{
-A \code{ggplot} object (or a combined plot list for \code{"combo"}).
+A \code{ggplot} object. For \code{"combo"}, a single combined
+  figure if \pkg{patchwork} is installed, otherwise a list of two plots.
 }
 \description{
 Visualises results from \code{\link{nl_predict}} or
 \code{\link{nl_derivatives}}.  The \code{type} argument selects the plot:
 \itemize{
-\item \code{"trajectory"}: predicted outcome vs \code{x} with optional
-confidence ribbon (v1 behaviour, now default).
-\item \code{"slope"}: first derivative (marginal effect) vs \code{x}.
-\item \code{"curvature"}: second derivative vs \code{x}.
-\item \code{"combo"}: trajectory + slope panels side by side.
+  \item \code{"trajectory"}: predicted outcome vs \code{x} with optional
+    confidence ribbon (v1 behaviour, now default).
+  \item \code{"slope"}: first derivative (marginal effect) vs \code{x}.
+  \item \code{"curvature"}: second derivative vs \code{x}.
+  \item \code{"combo"}: trajectory + slope panels side by side.
 }
+}
+\examples{
+fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+              cluster = "Subject", df = 3)
+pred  <- nl_predict(fit)
+deriv <- nl_derivatives(fit)
+nl_plot(pred)
+nl_plot(deriv_df = deriv, type = "slope")
+
 }
 \seealso{
 \code{\link{nl_predict}}, \code{\link{nl_derivatives}},
-\code{\link{nl_turning_points}}
+  \code{\link{nl_turning_points}}
 }

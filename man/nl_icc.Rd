@@ -28,18 +28,20 @@ level plus the residual.
 
 The ICC for grouping factor \eqn{g} is defined as:
 \deqn{ICC_g = \frac{\sigma^2_g}{\sum_j \sigma^2_j + \sigma^2_\epsilon}}
+
+For Gaussian models \eqn{\sigma^2_\epsilon} is the residual variance.
+For binary models it is the latent-scale variance (\eqn{\pi^2/3} for
+logit, 1 for probit, \eqn{\pi^2/6} for complementary log-log), which
+matches Stata's \code{estat icc}. With nested factors each value is the
+share of that level alone; the correlation between two units that share
+a lower-level group is the sum of the shares of that group and every
+group above it. With random slopes the ICC depends on \code{x}; the
+function then averages each component over the data and warns.
 }
 \examples{
-\dontrun{
-fit <- nl_fit(
-  data    = mydata,
-  y       = "math_score",
-  x       = "SES",
-  cluster = c("id", "schid"),
-  df      = 4
-)
+fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+              cluster = "Subject", df = 3)
 nl_icc(fit)
-}
 
 }
 \seealso{

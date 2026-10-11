@@ -14,6 +14,13 @@
 #'   \item Residual variance / deviance
 #' }
 #'
+#' Mixed models are compared on their maximum-likelihood fits: the spline
+#' model is refitted by ML if it was estimated by REML, and the comparison
+#' models are fitted by ML. REML likelihoods cannot be compared across
+#' models with different fixed effects. The comparison models use the same
+#' random-effects structure as the spline model (random intercepts only if
+#' the spline model has random spline slopes).
+#'
 #' @param object An \code{nl_fit} object (the spline model to compare against).
 #' @param polynomial_degrees Integer vector of polynomial degrees to include
 #'   as additional comparators. Default \code{c(2L, 3L)}. Set to
@@ -31,14 +38,12 @@
 #'   }
 #'   The table is pretty-printed automatically.
 #'
-#' @examples
-#' \dontrun{
-#' fit <- nl_fit(data = mydata, y = "score", x = "age", df = 4)
-#' nl_compare(fit)
-#' nl_compare(fit, polynomial_degrees = c(2, 3, 4))
-#' }
-#'
 #' @seealso \code{\link{nl_fit}}, \code{\link{nl_knots}}
+#'
+#' @examples
+#' fit <- nl_fit(lme4::sleepstudy, y = "Reaction", x = "Days",
+#'               cluster = "Subject", df = 3)
+#' nl_compare(fit, polynomial_degrees = 2)
 #'
 #' @export
 nl_compare <- function(
@@ -51,9 +56,6 @@ nl_compare <- function(
   if (!inherits(object, "nl_fit"))
     stop("`object` must be an 'nl_fit' object.", call. = FALSE)
 
-  data     <- tryCatch(stats::model.frame(object$model), error = function(e) NULL)
-  if (is.null(data))
-    stop("Cannot extract model frame from fitted model.", call. = FALSE)
 
   y        <- object$y
   x        <- object$x
@@ -78,9 +80,7 @@ nl_compare <- function(
       dev <- if (inherits(mod, "lm")) {
         stats::deviance(mod)
       } else if (inherits(mod, "lmerMod")) {
-        # Use ML deviance to avoid the REML deprecation warning
-        tryCatch(suppressWarnings(stats::deviance(mod, REML = FALSE)),
-                 error = function(e) NA_real_)
+        stats::deviance(mod)
       } else {
         tryCatch(stats::deviance(mod), error = function(e) NA_real_)
       }
@@ -96,29 +96,30 @@ nl_compare <- function(
 
   # --- 1. Linear model ---
   lin_rhs  <- paste(c(x, controls), collapse = " + ")
+  rand_str <- if (!is.null(object$random)) object$random else
+    if (!is.null(cluster)) .build_rand_formula(cluster, nested, x, df, bs_deg,
+                                               method, FALSE) else NULL
+  if (isTRUE(object$random_slope))
+    message("Note: the comparison models use random intercepts only; the ",
+            "spline model's random slopes make its fit not directly ",
+            "comparable.")
   lin_form <- if (!is.null(cluster)) {
-    rand <- if (length(cluster) == 1L) {
-      paste0("(1 | ", cluster, ")")
-    } else if (nested) {
-      paste0("(1 | ", cluster[1L], "/", cluster[2L], ")")
-    } else {
-      paste0("(1 | ", cluster[1L], ") + (1 | ", cluster[2L], ")")
-    }
-    stats::as.formula(paste0(y, " ~ ", lin_rhs, " + ", rand))
+    stats::as.formula(paste0(y, " ~ ", lin_rhs, " + ", rand_str))
   } else {
     stats::as.formula(paste0(y, " ~ ", lin_rhs))
   }
 
-  orig_data <- tryCatch(
+  fit_data <- object$data %||% tryCatch(
     eval(object$call$data, envir = parent.frame()),
-    error = function(e) NULL
-  )
-  fit_data <- if (!is.null(orig_data)) orig_data else data
+    error = function(e) NULL)
+  if (is.null(fit_data))
+    stop("Original data not available; refit with MultiSpline >= 0.3.0.",
+         call. = FALSE)
 
   lin_mod <- tryCatch({
     if (!is.null(cluster)) {
       if (identical(family$family, "gaussian"))
-        lme4::lmer(lin_form, data = fit_data)
+        lme4::lmer(lin_form, data = fit_data, REML = FALSE)
       else
         lme4::glmer(lin_form, data = fit_data, family = family)
     } else if (method == "gam") {
@@ -137,14 +138,7 @@ nl_compare <- function(
       poly_main <- paste0("poly(", x, ", ", deg, ")")
       poly_rhs  <- paste(c(poly_main, controls), collapse = " + ")
       poly_form <- if (!is.null(cluster)) {
-        rand <- if (length(cluster) == 1L) {
-          paste0("(1 | ", cluster, ")")
-        } else if (nested) {
-          paste0("(1 | ", cluster[1L], "/", cluster[2L], ")")
-        } else {
-          paste0("(1 | ", cluster[1L], ") + (1 | ", cluster[2L], ")")
-        }
-        stats::as.formula(paste0(y, " ~ ", poly_rhs, " + ", rand))
+        stats::as.formula(paste0(y, " ~ ", poly_rhs, " + ", rand_str))
       } else {
         stats::as.formula(paste0(y, " ~ ", poly_rhs))
       }
@@ -152,7 +146,7 @@ nl_compare <- function(
       pm <- tryCatch({
         if (!is.null(cluster)) {
           if (identical(family$family, "gaussian"))
-            lme4::lmer(poly_form, data = fit_data)
+            lme4::lmer(poly_form, data = fit_data, REML = FALSE)
           else
             lme4::glmer(poly_form, data = fit_data, family = family)
         } else {
@@ -164,7 +158,9 @@ nl_compare <- function(
   }
 
   # --- 3. Spline model (the nl_fit object) ---
-  model_list[["Spline"]] <- object$model
+  sp <- object$model
+  if (inherits(sp, "lmerMod") && lme4::isREML(sp)) sp <- lme4::refitML(sp)
+  model_list[["Spline"]] <- sp
 
   # --- 4. Collect fit statistics ---
   rows <- lapply(names(model_list), function(nm) {
